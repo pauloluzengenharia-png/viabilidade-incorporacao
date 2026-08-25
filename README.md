@@ -52,6 +52,7 @@ As migrations rodam sozinhas no startup — não há passo manual de schema.
 | `/empreendimento/{id}/cenarios` | comparação dos cenários lado a lado |
 | `/empreendimento/{id}/fluxo` | fluxo de caixa mensal, exposição e aporte |
 | `/empreendimento/{id}/importar` | upload dos exports do Sienge, com histórico |
+| `/admin/carga` | **carga inicial**: sobe a planilha + os parâmetros e monta a primeira SPE |
 | `/api/docs` | a API, documentada |
 
 ## Subir no Render
@@ -76,17 +77,25 @@ workspace `pauloluz.engenharia@gmail.com`.
    lê o `render.yaml`, sobe o serviço web e liga a `DATABASE_URL` ao banco que
    já existe. Não precisa copiar credencial nenhuma.
 
-3. Carregue a SPE Kiev **uma vez**, da sua máquina, apontando para o banco de
-   produção (a *External Database URL* está no dashboard do banco):
+3. No painel do serviço, em **Environment**, defina `VIAB_SENHA`. Enquanto ela
+   não existir o sistema responde 503 em tudo — é o comportamento desejado, não
+   uma falha.
+
+4. Entre no sistema e vá em **`/admin/carga`**. Suba a planilha da SPE e o
+   `dados/kiev.json`: a tela roda a mesma migração do `migrar_kiev.py` dentro do
+   servidor e devolve o registro linha a linha. Os dois arquivos são apagados do
+   disco do servidor assim que a carga termina — os dados ficam no banco.
+
+   Esse caminho existe para a senha do banco não precisar sair do painel do
+   Render. Quem preferir a linha de comando pode continuar rodando, da própria
+   máquina, com a *External Database URL* exportada em `DATABASE_URL`:
 
    ```bash
-   export DATABASE_URL="postgresql://...@oregon-postgres.render.com/viabilidade_db"
-   python3 migrar_kiev.py "caminho/para/26. Incorrido SPE Kiev.xlsx"
-   python3 -m pytest tests -q          # confere as 47 linhas contra a planilha
+   python3 migrar_kiev.py "caminho/para/26. Incorrido SPE Kiev.xlsx" dados/kiev.json
+   python3 -m pytest tests -q          # confere as linhas contra a planilha
    ```
 
-   Daí em diante os próximos empreendimentos entram pela tela de importação, sem
-   passar por planilha.
+   Do segundo empreendimento em diante, tudo entra pela tela de importação.
 
 O plano free do serviço web hiberna depois de 15 minutos sem acesso e leva uns
 30 segundos para acordar. Para uso de verdade, `starter` (US$ 7/mês) resolve.

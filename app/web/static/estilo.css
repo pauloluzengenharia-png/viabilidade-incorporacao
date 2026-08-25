@@ -182,3 +182,8 @@ figcaption{font-size:.8rem; color:var(--tinta-3); padding:.2rem 1.1rem 1rem;
   nav.abas{padding:0 1rem}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------------- registro da carga inicial ---------------- */
+pre.registro{margin:0; padding:.9rem 1.1rem; font-family:"IBM Plex Mono",monospace;
+  font-size:.78rem; line-height:1.65; color:var(--tinta-2); white-space:pre;
+  background:var(--papel-2)}

@@ -41,14 +41,14 @@ PARAMETROS = sys.argv[2] if len(sys.argv) > 2 else "dados/kiev.json"
 HOJE = dt.date(2026, 8, 25)
 
 
-def carregar_parametros() -> dict:
+def carregar_parametros(caminho: str) -> dict:
     """
     Os números da SPE — viabilidade aprovada, empresas do grupo, premissas —
     moram em `dados/kiev.json`, fora do controle de versão. O repositório é
     código; informação financeira da empresa não entra nele.
     """
     import json
-    caminho = pathlib.Path(PARAMETROS)
+    caminho = pathlib.Path(caminho)
     if not caminho.exists():
         raise SystemExit(
             f"não encontrei {caminho}. Este arquivo tem os parâmetros da SPE "
@@ -57,7 +57,25 @@ def carregar_parametros() -> dict:
     return json.loads(caminho.read_text(encoding="utf-8"))
 
 
-PARAMS = carregar_parametros()
+# Os parâmetros são carregados por `preparar()`, e não no import: assim este
+# módulo pode ser importado pela tela de carga inicial, que recebe a planilha e
+# os parâmetros por upload em vez de por caminho fixo.
+PARAMS: dict = {}
+INTERCOMPANY: list = []
+ORCADO_MIL: dict = {}
+PREMISSAS_COMUNS: list = []
+TERRENO: list = []
+
+
+def preparar(arquivo: str, parametros: str) -> None:
+    global ARQUIVO, PARAMETROS, PARAMS
+    global INTERCOMPANY, ORCADO_MIL, PREMISSAS_COMUNS, TERRENO
+    ARQUIVO, PARAMETROS = arquivo, parametros
+    PARAMS = carregar_parametros(parametros)
+    INTERCOMPANY = [tuple(x) for x in PARAMS["intercompany"]]
+    ORCADO_MIL = PARAMS["orcado_mil"]
+    PREMISSAS_COMUNS = PARAMS["premissas"]
+    TERRENO = PARAMS["terreno_parcelas"]
 
 
 def aba_como_dicts(wb, nome: str, linha_cabecalho: int = 1) -> list[dict]:
@@ -177,7 +195,6 @@ def semear_contas(s, wb) -> int:
 # empreendimento — são movimento de caixa entre CNPJs. Na planilha vivem nas
 # linhas 210-217 do fluxo mensal, fora do DRE. Sem esta classificação, 159
 # lançamentos (R$ 2,6 M) ficavam pendurados em "A CLASSIFICAR".
-INTERCOMPANY = [tuple(x) for x in PARAMS["intercompany"]]
 
 
 def classificar_intercompany(s) -> int:
@@ -200,7 +217,6 @@ def classificar_intercompany(s) -> int:
 # VIABILIDADE coluna N, em R$ mil. As premissas do estudo original não
 # existem mais em lugar nenhum: só o resultado sobreviveu. Por isso o cenário
 # orçado guarda o RESULTADO, e não entradas para o motor reprocessar.
-ORCADO_MIL = PARAMS["orcado_mil"]
 
 
 def congelar_orcado(s, cenario_id: int) -> int:
@@ -438,7 +454,6 @@ def criar_orcamento(s, emp: int, wb, custo_raso: float) -> int:
 # =====================================================================
 # 6. cenários
 # =====================================================================
-PREMISSAS_COMUNS = PARAMS["premissas"]
 UNIDADE_DA_PREMISSA = {
     "ret": "percentual", "distratos": "percentual",
     "despesas_comerciais": "moeda", "terreno_registro_perc": "percentual",
@@ -451,7 +466,6 @@ UNIDADE_DA_PREMISSA = {
     "financiamento_gatilho_obra": "percentual", "meses_pos_chaves": "meses",
     "preco_m2_estoque": "r$/m2",
 }
-TERRENO = PARAMS["terreno_parcelas"]
 
 
 def criar_cenario(s, emp: int, nome: str, tipo: str, principal: bool,
@@ -512,7 +526,8 @@ def ler_plano(wb, coluna: int) -> list[tuple[dt.date, str, int]]:
 
 
 # =====================================================================
-def main() -> int:
+def main(arquivo: str | None = None, parametros: str | None = None) -> int:
+    preparar(arquivo or ARQUIVO, parametros or PARAMETROS)
     print("aplicando migrations...", aplicar_migrations())
     wb = openpyxl.load_workbook(ARQUIVO, data_only=True)
     s = Sessao()

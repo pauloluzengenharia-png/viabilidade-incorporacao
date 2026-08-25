@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block titulo %}Carga inicial{% endblock %}
+{% block conteudo %}
+
+<h1>Carga inicial de uma SPE</h1>
+<p class="sub">
+  Esta tela existe para o <b>primeiro</b> empreendimento entrar no sistema sem
+  passar por linha de comando — sem precisar da senha do banco na sua máquina.
+  Ela roda exatamente a mesma migração do <code>migrar_kiev.py</code>: lê a
+  planilha, cria o empreendimento, semeia o plano de contas, importa as cinco
+  abas do Sienge, monta o orçamento de obra, cria os cenários e calcula a
+  primeira rodada de cada um. Do segundo empreendimento em diante o caminho é
+  <b>Importar do Sienge</b>.
+</p>
+
+{% if ja_tem %}
+<div class="aviso"><span>
+  <b>Já existe empreendimento cadastrado.</b> Rodar a carga de novo cria um
+  segundo cadastro com os mesmos dados — ela não corrige o que já está lá.
+</span></div>
+{% endif %}
+
+{% if erro %}
+<div class="aviso"><span>
+  <b>A carga parou no meio.</b> {{ erro }} O registro abaixo mostra até onde ela
+  chegou; o que já foi gravado continua no banco.
+</span></div>
+{% endif %}
+
+{% if registro %}
+<h2>Registro da carga</h2>
+<div class="rolagem"><pre class="registro">{{ registro }}</pre></div>
+{% if emp_id %}
+<p style="margin-top:1rem">
+  <a class="botao" href="/empreendimento/{{ emp_id }}">Abrir a viabilidade</a></p>
+{% endif %}
+{% endif %}
+
+<h2>Arquivos</h2>
+<form method="post" action="/admin/carga" enctype="multipart/form-data" class="acoes"
+      style="align-items:flex-end">
+  <label class="campo">Planilha da SPE (.xlsx)
+    <input type="file" name="planilha" accept=".xlsx,.xlsm" required>
+  </label>
+  <label class="campo">Parâmetros (.json)
+    <input type="file" name="parametros" accept=".json,application/json" required>
+  </label>
+  <button class="principal" type="submit">Rodar a carga</button>
+</form>
+
+<p class="legenda-tab">
+  A planilha é a de incorrido, com as abas VIABILIDADE, Unidades, Contratos,
+  Receber, Recebido e Fin_Obra. Os parâmetros são o <code>kiev.json</code>
+  entregue junto com o sistema — viabilidade aprovada, contas de mútuo,
+  premissas e cenários —, que fica fora do repositório de propósito. A carga
+  leva de 30 a 60 segundos; não feche a aba.
+</p>
+
+{% endblock %}

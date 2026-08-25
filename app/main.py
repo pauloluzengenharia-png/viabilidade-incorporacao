@@ -105,6 +105,61 @@ def sair():
     return resposta
 
 
+# ================================================================ carga inicial
+def _tem_empreendimento(s: Session) -> bool:
+    return q(s, "SELECT count(*) AS n FROM empreendimento")[0]["n"] > 0
+
+
+@app.get("/admin/carga", response_class=HTMLResponse)
+def tela_carga(request: Request, s: Session = Depends(sessao)):
+    return templates.TemplateResponse(request, "carga.html",
+                                      {"ja_tem": _tem_empreendimento(s)})
+
+
+@app.post("/admin/carga", response_class=HTMLResponse)
+async def rodar_carga(request: Request, planilha: UploadFile = File(...),
+                      parametros: UploadFile = File(...),
+                      s: Session = Depends(sessao)):
+    """
+    Roda a migração inicial com os dois arquivos enviados.
+
+    Os arquivos vão para um diretório temporário e são apagados no fim: a
+    planilha e o JSON de parâmetros têm informação financeira da empresa e não
+    ficam no disco do servidor depois que os dados já estão no banco.
+
+    O `print` da migração é capturado e devolvido na tela — é o mesmo registro
+    que apareceria no terminal, e é o que permite conferir contagem por contagem
+    o que entrou.
+    """
+    import contextlib
+    import shutil
+    import tempfile
+
+    import migrar_kiev
+
+    pasta = tempfile.mkdtemp(prefix="carga-")
+    saida, erro, emp_id = io.StringIO(), None, None
+    try:
+        caminhos = {}
+        for campo, enviado in (("xlsx", planilha), ("json", parametros)):
+            destino = pathlib.Path(pasta) / f"entrada.{campo}"
+            destino.write_bytes(await enviado.read())
+            caminhos[campo] = str(destino)
+        try:
+            with contextlib.redirect_stdout(saida):
+                emp_id = migrar_kiev.main(caminhos["xlsx"], caminhos["json"])
+        except Exception as e:                      # noqa: BLE001 — a tela mostra
+            erro = f"{type(e).__name__}: {e}"
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
+
+    return templates.TemplateResponse(
+        request, "carga.html",
+        {"ja_tem": False, "registro": saida.getvalue(), "erro": erro,
+         "emp_id": emp_id},
+        status_code=500 if erro else 200)
+
+
 # ================================================================ telas
 @app.get("/", response_class=HTMLResponse)
 def inicio(request: Request, s: Session = Depends(sessao)):

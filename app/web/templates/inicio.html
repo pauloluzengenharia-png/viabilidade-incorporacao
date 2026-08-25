@@ -6,7 +6,10 @@
 
 {% if not empreendimentos %}
   <div class="aviso"><span><b>Nenhum empreendimento ainda.</b>
-    Rode <code>python3 migrar_kiev.py dados/kiev.xlsx</code> para carregar o primeiro.</span></div>
+    A <a href="/admin/carga">carga inicial</a> lê a planilha de incorrido e os
+    parâmetros da SPE e monta o primeiro cadastro — cenários e primeira rodada
+    incluídos.</span></div>
+  <p><a class="botao" href="/admin/carga">Fazer a carga inicial</a></p>
 {% endif %}
 
 <div class="cartoes">
