@@ -21,7 +21,7 @@ from .importadores import gravar
 from .importadores.sienge import (ler_planilha, normalizar_contratos,
                                   normalizar_movimentos, normalizar_recebido,
                                   normalizar_receber, normalizar_unidades)
-from . import edicao
+from . import edicao, planilha, procedencia
 from .glossario import SECOES, ajuda, ajuda_da_linha
 from .novo_estudo import FORMATOS_CURVA, Estudo
 from .novo_estudo import curva as curva_de
@@ -75,6 +75,12 @@ def dinheiro(v):
 templates.env.filters.update(moeda=moeda, milhoes=milhoes, dinheiro=dinheiro,
                              percentual=percentual, mes=mes_curto)
 # a explicação de cada linha mora no glossário; o template só a pendura
+def _slug(rotulo: str) -> str:
+    """Um identificador de URL estável a partir do rótulo da conta."""
+    import hashlib
+    return hashlib.sha1(rotulo.encode()).hexdigest()[:10]
+
+
 def rotulo_do_campo(chave: str) -> str:
     """Nome legível de um campo, para o histórico não falar em chave de banco."""
     for mod in edicao.MODULOS.values():
@@ -86,7 +92,8 @@ def rotulo_do_campo(chave: str) -> str:
 
 
 templates.env.globals.update(ajuda_da_linha=ajuda_da_linha, ajuda=ajuda,
-                             rotulo_do_campo=rotulo_do_campo)
+                             rotulo_do_campo=rotulo_do_campo,
+                             slug_da_linha=_slug)
 
 
 @app.on_event("startup")
@@ -127,6 +134,93 @@ def sair():
     resposta = RedirectResponse("/entrar", status_code=303)
     resposta.delete_cookie(COOKIE)
     return resposta
+
+
+# ================================================================ abertura da linha
+def _linha_por_slug(slug: str) -> Optional[str]:
+    from .servico import LINHAS_DRE
+    return next((r for r, _ in LINHAS_DRE if _slug(r) == slug), None)
+
+
+@app.get("/empreendimento/{emp_id}/linha/{slug}", response_class=HTMLResponse)
+def tela_linha(emp_id: int, slug: str, request: Request,
+               ate: Optional[str] = None, cenario: Optional[int] = None,
+               s: Session = Depends(sessao)):
+    """
+    A linha do resultado aberta por dentro: como se calcula, com que insumos,
+    quais lançamentos somam o realizado e como o valor se distribui no tempo.
+    """
+    rotulo = _linha_por_slug(slug)
+    if not rotulo:
+        raise HTTPException(404, "linha não encontrada")
+
+    emp = _empreendimento(s, emp_id)
+    corte = _data(ate) or emp.get("mes_corte_realizado")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+
+    entradas = carregar_entradas(s, cen["id"])
+    dre, fluxo, _ = calcular(entradas)
+    from .motor.engine import calcular_vgv
+    bloco = calcular_vgv(entradas.unidades, entradas.premissas, entradas.tabela)
+
+    formula = procedencia.formula_da_linha(rotulo, dre, bloco, entradas.obra,
+                                           entradas.premissas)
+    chaves = [t.chave for t in (formula.termos if formula else []) if t.chave]
+    ctx = {
+        "emp": emp, "aba": "viabilidade", "rotulo": rotulo, "corte": corte,
+        "cenario": cen, "cenarios": _cenarios(s, emp_id),
+        "formula": formula,
+        "insumos": procedencia.origem_das_premissas(s, cen["id"], chaves),
+        "realizado": procedencia.lancamentos_da_linha(s, emp_id, rotulo, corte),
+        "projecao": procedencia.projecao_da_linha(s, emp_id, cen["id"], rotulo),
+        "importacoes": procedencia.importacoes(s, emp_id),
+        "verbete": ajuda_da_linha(rotulo),
+        "slug": slug,
+        "linha_tabela": next(
+            (l for l in visao_viabilidade(s, emp_id, corte) if l["linha"] == rotulo),
+            None),
+    }
+    return templates.TemplateResponse(request, "linha.html", ctx)
+
+
+@app.get("/empreendimento/{emp_id}/linha/{slug}/planilha")
+def baixar_memoria(emp_id: int, slug: str, ate: Optional[str] = None,
+                   cenario: Optional[int] = None, s: Session = Depends(sessao)):
+    """A mesma abertura da linha, em planilha, com os resultados como fórmula."""
+    from fastapi.responses import Response
+
+    rotulo = _linha_por_slug(slug)
+    if not rotulo:
+        raise HTTPException(404, "linha não encontrada")
+    emp = _empreendimento(s, emp_id)
+    corte = _data(ate) or emp.get("mes_corte_realizado")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+
+    entradas = carregar_entradas(s, cen["id"])
+    dre, _, _ = calcular(entradas)
+    from .motor.engine import calcular_vgv
+    bloco = calcular_vgv(entradas.unidades, entradas.premissas, entradas.tabela)
+    formula = procedencia.formula_da_linha(rotulo, dre, bloco, entradas.obra,
+                                           entradas.premissas)
+    chaves = [t.chave for t in (formula.termos if formula else []) if t.chave]
+
+    conteudo = planilha.memoria_de_calculo(
+        emp=emp, cenario=cen, rotulo=rotulo, corte=corte, formula=formula,
+        insumos=procedencia.origem_das_premissas(s, cen["id"], chaves),
+        realizado=procedencia.lancamentos_da_linha(s, emp_id, rotulo, corte),
+        projecao=procedencia.projecao_da_linha(s, emp_id, cen["id"], rotulo),
+        linha_tabela=next(
+            (l for l in visao_viabilidade(s, emp_id, corte) if l["linha"] == rotulo),
+            None),
+        verbete=ajuda_da_linha(rotulo))
+
+    limpo = "".join(ch if ch.isalnum() or ch in " -_" else ""
+                    for ch in rotulo).strip().replace(" ", "-")
+    nome = f"memoria-{limpo}-{cen['nome']}.xlsx"
+    return Response(
+        conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'})
 
 
 # ================================================================ dados

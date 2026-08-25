@@ -620,3 +620,8 @@ table.editavel .apagar:hover{color:var(--realizado); background:var(--realizado-
   pointer-events:none; font-family:"Inter",sans-serif}
 .com-adorno.tem-adorno input{padding-left:2.2rem}
 .com-adorno input{width:100%}
+
+/* o valor que abre a linha por dentro */
+td .abrir{text-decoration:none; border-bottom:1px dashed var(--fio-forte);
+  padding-bottom:1px}
+td .abrir:hover{border-bottom-color:var(--tinta); border-bottom-style:solid}

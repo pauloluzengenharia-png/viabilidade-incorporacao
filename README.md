@@ -54,6 +54,7 @@ As migrations rodam sozinhas no startup — não há passo manual de schema.
 | `/empreendimento/{id}/importar` | upload dos exports do Sienge, com histórico |
 | `/novo` | **cadastro guiado**: cria um estudo do zero, com a explicação de cada campo |
 | `/guia` | **como preencher cada dado**: o manual, campo a campo |
+| `/empreendimento/{id}/linha/{linha}` | **de onde vem o número**: fórmula, insumos, lançamentos e projeção |
 | `/empreendimento/{id}/dados` | **os módulos de entrada de dados**, um por assunto |
 | `/empreendimento/{id}/dados/historico` | quem mudou o quê, quando, e de qual valor para qual |
 | `/admin/carga` | **carga inicial**: sobe a planilha + os parâmetros e monta a primeira SPE |
@@ -118,6 +119,8 @@ app/
     gravar.py    gravação idempotente
   glossario.py   ← o que é cada dado: fonte única do guia E da ajuda nas telas
   edicao.py      ← os módulos de entrada: campos declarados, diferença e histórico
+  procedencia.py ← de onde vem cada número: fórmula, insumos, lançamentos
+  planilha.py    ← a memória de cálculo em .xlsx, com os resultados em fórmula
   novo_estudo.py ← criação de um estudo do zero, com validação que lista tudo
   main.py        ← FastAPI: telas e API
 migrations/      ← .sql numerados, aplicados uma vez cada
@@ -349,6 +352,45 @@ Percentual **não** ganha adorno: o campo é digitado em fração (`0,06` para 6
 um `%` encostado num campo escrito `0,06` leria como "zero vírgula zero seis por
 cento". O rótulo já diz "% do bruto", que é a informação certa sem a leitura
 errada.
+
+## De onde vem cada número
+
+Clicar no valor **atualizado** de qualquer linha da tabela abre a linha por
+dentro, e a tela responde as quatro perguntas que "de onde vem esse número"
+costuma esconder:
+
+| | |
+|---|---|
+| **fórmula** | como o motor chegou nele, com os operandos concretos |
+| **insumos** | qual premissa entrou, quanto vale, e quem a colocou ali |
+| **lançamentos** | quais movimentos do Sienge somam a coluna Realizado |
+| **projeção** | como o valor se distribui mês a mês no fluxo |
+
+A decisão de fundo é que **a fórmula é montada a partir do mesmo cálculo que
+produziu o número**: `app/procedencia.py` recebe o DRE, o bloco de VGV e as
+premissas já calculados e descreve o que eles contêm. Escrever a fórmula como
+texto solto seria criar uma segunda versão da conta, livre para divergir da
+primeira sem ninguém notar — que é exatamente o que a planilha fazia com as
+células de memória.
+
+Três testes guardam a promessa: toda linha tem fórmula ou é subtotal declarado;
+o resultado descrito bate com o que a tabela publica; e **a soma dos lançamentos
+listados dá o número da coluna Realizado, em toda linha**. Sem esse último, a
+tela viraria uma segunda versão da verdade.
+
+Duas linhas não vêm de movimento nenhum e são explicadas em vez de listadas: a
+comissão é competência — a venda aconteceu, a comissão é devida, e ela nunca
+passa pela conta corrente da SPE — e os subtotais são soma de outras linhas.
+
+### A memória de cálculo em planilha
+
+O botão baixa um `.xlsx` com quatro abas: resumo, fórmula, lançamentos e
+projeção. **Os resultados são fórmulas, não valores colados** — a aba de fórmula
+calcula a partir dos operandos, a de lançamentos soma com `SUM`, a de projeção
+acumula. Quem receber pode mexer num operando e ver o efeito, que é o que se
+espera de uma planilha e o que a planilha de origem tinha deixado de fazer em
+várias linhas. Os operandos vêm em azul, na convenção de modelo financeiro:
+azul é o que se digita, preto é o que se calcula.
 
 ## Histórico de alterações
 

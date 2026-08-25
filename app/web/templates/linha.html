@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block titulo %}{{ rotulo }} — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+<p style="margin:0 0 1.4rem">
+  <a class="botao" href="/empreendimento/{{ emp.id }}?ate={{ corte }}">&larr; Voltar à viabilidade</a>
+</p>
+
+<div class="regua"></div>
+<span class="rotulo">Linha do resultado</span>
+<h1>{{ rotulo }}</h1>
+{% if verbete %}
+<p class="sub">{{ verbete.o_que }}</p>
+{% endif %}
+
+{% if linha_tabela %}
+<dl class="painel">
+  <div class="cel"><dt>Orçado</dt><dd>{{ linha_tabela.orcado|moeda(0) }}</dd>
+    <span class="nota">no lançamento, congelado</span></div>
+  <div class="cel"><dt>Atualizado</dt><dd>{{ linha_tabela.atualizado|moeda(0) }}</dd>
+    <span class="nota">cenário {{ cenario.nome }}</span></div>
+  <div class="cel"><dt>Realizado</dt><dd>{{ linha_tabela.realizado|moeda(0) }}</dd>
+    <span class="nota">até {{ corte|mes }}</span></div>
+  <div class="cel"><dt>A realizar</dt><dd>{{ linha_tabela.a_realizar|moeda(0) }}</dd>
+    <span class="nota">atualizado − realizado</span></div>
+</dl>
+{% endif %}
+
+<div class="acoes">
+  <form method="get" style="display:flex; gap:.7rem; align-items:flex-end">
+    <input type="hidden" name="ate" value="{{ corte }}">
+    <label class="campo"><span class="rot">Cenário</span>
+      <select name="cenario" onchange="this.form.submit()">
+        {% for c in cenarios %}
+        <option value="{{ c.id }}" {{ 'selected' if c.id == cenario.id }}>
+          {{ c.nome }}{% if c.tipo == 'orcado' %} (congelado){% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button type="submit">Trocar</button></noscript>
+  </form>
+  <span style="flex:1"></span>
+  <a class="botao" href="/empreendimento/{{ emp.id }}/linha/{{ slug }}/planilha?ate={{ corte }}&cenario={{ cenario.id }}">
+    Baixar a memória de cálculo</a>
+</div>
+
+<!-- ------------------------------------------------------- como se calcula -->
+{% if formula %}
+<h2>Como o valor atualizado é calculado</h2>
+<p class="legenda-tab" style="margin:0 0 1.2rem">
+  <b class="mono">{{ formula.texto }}</b>
+</p>
+
+<div class="rolagem">
+  <table>
+    <thead><tr>
+      <th class="conta">Operando</th>
+      <th class="n" style="width:200px">Valor</th>
+      <th style="min-width:280px">De onde vem</th>
+    </tr></thead>
+    <tbody>
+    {% for t in formula.termos %}
+      <tr>
+        <td class="conta">{{ t.rotulo }}</td>
+        <td class="n {{ 'neg' if t.valor < 0 }}">
+          {%- if t.formato == 'percentual' %}{{ t.valor|percentual(4) }}
+          {%- else %}{{ t.valor|moeda(2) }}{% endif -%}
+        </td>
+        <td class="fraco">
+          {{ t.origem }}
+          {%- if t.chave and insumos.get(t.chave) %}
+            {% set i = insumos[t.chave] %}
+            · <span class="marca-c">{{ i.origem }}</span>
+            {% if i.alteracao %}
+            <br><span style="color:var(--realizado)">alterada por {{ i.alteracao.autor }}
+              em {{ i.alteracao.em.strftime('%d/%m/%Y %H:%M') }}:
+              {{ i.alteracao.valor_anterior }} → {{ i.alteracao.valor_novo }}</span>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+      <tr class="total">
+        <td class="conta">Resultado</td>
+        <td class="n {{ 'neg' if formula.resultado < 0 }}">{{ formula.resultado|moeda(2) }}</td>
+        <td class="fraco">é o número da coluna Atualizado</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% if formula.nota %}
+<p class="legenda-tab"><b>Vale saber.</b> {{ formula.nota }}</p>
+{% endif %}
+{% else %}
+<h2>Como o valor atualizado é calculado</h2>
+<p class="legenda-tab">Esta linha não tem fórmula própria — ela é soma de outras.</p>
+{% endif %}
+
+<!-- --------------------------------------------------------- o realizado -->
+<h2>O que somou o realizado</h2>
+{% if realizado.nota %}
+<p class="legenda-tab" style="margin:0 0 1.2rem">{{ realizado.nota }}</p>
+{% endif %}
+
+{% if realizado.tipo == 'comissao' %}
+  {% if realizado.linhas %}
+  <div class="rolagem">
+    <table>
+      <thead><tr>
+        <th class="conta">Unidade</th>
+        <th style="width:130px">Contrato</th>
+        <th class="n" style="width:170px">Preço de tabela</th>
+        <th class="n" style="width:170px">Líquido do contrato</th>
+        <th class="n" style="width:150px">Comissão</th>
+      </tr></thead>
+      <tbody>
+      {% for l in realizado.linhas %}
+        <tr>
+          <td class="conta">{{ l.nome }}</td>
+          <td class="fraco">{{ l.data_contrato.strftime('%d/%m/%Y') if l.data_contrato }}</td>
+          <td class="n">{{ l.preco_bruto|moeda(2) }}</td>
+          <td class="n">{{ l.liquido|moeda(2) }}</td>
+          <td class="n neg">-{{ l.comissao|moeda(2) }}</td>
+        </tr>
+      {% endfor %}
+        <tr class="total">
+          <td class="conta">{{ realizado.linhas|length }} contrato(s)</td>
+          <td></td><td></td><td></td>
+          <td class="n neg">{{ realizado.total|moeda(2) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="legenda-tab">Nenhum contrato assinado até {{ corte|mes }}.</p>
+  {% endif %}
+
+{% elif realizado.linhas %}
+  <h3 style="margin-bottom:.7rem">Por conta do plano de contas</h3>
+  <div class="rolagem" style="margin-bottom:2rem">
+    <table>
+      <thead><tr>
+        <th class="conta">Conta</th>
+        <th class="n" style="width:120px">Lançamentos</th>
+        <th class="n" style="width:180px">Valor</th>
+      </tr></thead>
+      <tbody>
+      {% for c in realizado.por_conta %}
+        <tr>
+          <td class="conta"><span class="mono fraco">{{ c.codigo }}</span> {{ c.descricao }}</td>
+          <td class="n fraco">{{ c.n }}</td>
+          <td class="n {{ 'neg' if c.valor < 0 }}">{{ c.valor|moeda(2) }}</td>
+        </tr>
+      {% endfor %}
+        <tr class="total">
+          <td class="conta">Total</td>
+          <td class="n">{{ realizado.linhas|length }}</td>
+          <td class="n {{ 'neg' if realizado.total < 0 }}">{{ realizado.total|moeda(2) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3 style="margin-bottom:.7rem">Lançamento a lançamento</h3>
+  <div class="rolagem" style="max-height:560px">
+    <table>
+      <thead><tr>
+        <th style="width:110px">Data</th>
+        <th style="width:110px">Competência</th>
+        <th class="conta" style="min-width:220px">Conta</th>
+        <th style="min-width:200px">Fornecedor</th>
+        <th style="width:110px">Rateio</th>
+        <th class="n" style="width:160px">Valor</th>
+      </tr></thead>
+      <tbody>
+      {% for m in realizado.linhas %}
+        <tr>
+          <td class="fraco">{{ m.data_movimento.strftime('%d/%m/%Y') }}</td>
+          <td class="fraco">{{ m.mes_competencia|mes }}</td>
+          <td class="conta"><span class="mono fraco">{{ m.conta_codigo }}</span> {{ m.conta }}</td>
+          <td class="fraco">{{ m.fornecedor or '—' }}</td>
+          <td class="n fraco">
+            {%- if m.rateio_categoria and m.rateio_categoria|float < 100 -%}
+              {{ (m.rateio_categoria|float)|round(2) }}%
+            {%- else %}integral{% endif -%}
+          </td>
+          <td class="n {{ 'neg' if m.valor < 0 }}">{{ m.valor|moeda(2) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="legenda-tab">
+    {{ realizado.linhas|length }} lançamento(s) com competência até
+    {{ corte|mes }}, somando <b>{{ realizado.total|moeda(2) }}</b> — que é o
+    número da coluna Realizado. Um pagamento rateado entre categorias aparece
+    mais de uma vez, cada linha com a sua fração.
+  </p>
+
+{% else %}
+  <p class="legenda-tab">
+    Nenhum lançamento do Sienge caiu nesta linha até {{ corte|mes }}. Isso
+    significa uma de duas coisas: ou o gasto ainda não aconteceu, ou aconteceu e
+    o lançamento está sem conta — nesse caso ele aparece no aviso da tela de
+    viabilidade, em “A CLASSIFICAR”.
+  </p>
+{% endif %}
+
+<!-- ---------------------------------------------------------- a projeção -->
+{% if projecao %}
+<h2>Como o valor se distribui no tempo</h2>
+<div class="rolagem" style="max-height:460px">
+  <table>
+    <thead><tr>
+      <th class="conta" style="min-width:120px">Mês</th>
+      <th class="n" style="width:200px">Valor projetado</th>
+      <th class="n" style="width:200px">Acumulado</th>
+    </tr></thead>
+    <tbody>
+    {% set ns = namespace(acc=0) %}
+    {% for l in projecao %}
+      {% set ns.acc = ns.acc + l.valor|float %}
+      <tr>
+        <td class="conta">{{ l.mes|mes }}</td>
+        <td class="n {{ 'neg' if l.valor|float < 0 }}">{{ l.valor|moeda(2) }}</td>
+        <td class="n fraco">{{ ns.acc|moeda(2) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="legenda-tab">
+  Do fluxo de caixa do cenário {{ cenario.nome }}. O total daqui pode não bater
+  com a linha do resultado por três motivos, todos esperados: parte do valor cai
+  fora do horizonte projetado, a linha inclui permuta — que é custo e não é
+  caixa —, ou cada mês foi arredondado a centavos na gravação, o que numa obra de
+  quatro anos dá alguns reais de diferença no total.
+</p>
+{% endif %}
+
+<!-- --------------------------------------------------------- importações -->
+{% if importacoes and realizado.tipo == 'movimentos' %}
+<h2>De onde vieram os lançamentos</h2>
+<div class="rolagem">
+  <table>
+    <thead><tr>
+      <th class="conta">Fonte</th>
+      <th style="min-width:240px">Arquivo</th>
+      <th class="n" style="width:130px">Linhas</th>
+      <th style="width:170px">Quando</th>
+    </tr></thead>
+    <tbody>
+    {% for i in importacoes %}
+      <tr>
+        <td class="conta">{{ i.fonte }}</td>
+        <td class="fraco">{{ i.arquivo or '—' }}</td>
+        <td class="n fraco">{{ i.linhas_gravadas }} de {{ i.linhas_lidas }}</td>
+        <td class="fraco">{{ i.importado_em.strftime('%d/%m/%Y %H:%M') }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+{% endblock %}

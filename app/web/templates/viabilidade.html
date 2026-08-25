@@ -102,7 +102,9 @@
       </td>
       <td class="n col-orcado {{ 'neg' if l.orcado < 0 }}">{{ l.orcado|moeda(0) }}</td>
       <td class="n barra {{ 'saida neg' if l.atualizado < 0 }}"
-          style="--peso:{{ '%.4f'|format(l.peso) }}">{{ l.atualizado|moeda(0) }}</td>
+          style="--peso:{{ '%.4f'|format(l.peso) }}">
+        <a class="abrir" href="/empreendimento/{{ emp.id }}/linha/{{ slug_da_linha(l.linha) }}?ate={{ corte }}"
+           title="De onde vem este número">{{ l.atualizado|moeda(0) }}</a></td>
       <td class="n fraco col-perc">{{ l.perc_vv|percentual }}</td>
       <td class="n col-var {{ 'fraco' if l.variacao is none }}">
         {%- if l.variacao is none %}—{% else %}{{ l.variacao|percentual }}{% endif -%}
@@ -119,8 +121,10 @@
   maior saída do estudo — é para o olho ver a proporção antes de ler o
   algarismo. <strong>Variação</strong> é atualizado ÷ orçado − 1: numa linha de
   despesa, positivo é má notícia; numa linha de receita, é boa. Clique no nome
-  de qualquer conta para ver o que ela é e de onde o número vem, ou abra o
-  <a href="/guia">guia completo de preenchimento</a>.
+  de qualquer conta para ver o que ela é; clique no valor <b>atualizado</b> para
+  abrir a linha por dentro — a fórmula com os operandos, qual premissa entrou,
+  os lançamentos do Sienge que somam o realizado e a projeção mês a mês. O
+  <a href="/guia">guia de preenchimento</a> explica cada campo.
 </p>
 
 {% endblock %}
