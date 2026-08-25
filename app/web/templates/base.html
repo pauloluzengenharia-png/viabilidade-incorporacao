@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block titulo %}Viabilidade{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+<header class="topo">
+  <div class="faixa">
+    <a class="marca" href="/">Viabilidade <span>· incorporação</span></a>
+    {% if emp is defined and emp %}<span class="rotulo">{{ emp.nome }}</span>{% endif %}
+  </div>
+  {% if emp is defined and emp %}
+  <nav class="abas">
+    <a href="/empreendimento/{{ emp.id }}" class="{{ 'ativa' if aba=='viabilidade' }}">Viabilidade</a>
+    <a href="/empreendimento/{{ emp.id }}/cenarios" class="{{ 'ativa' if aba=='cenarios' }}">Cenários</a>
+    <a href="/empreendimento/{{ emp.id }}/fluxo" class="{{ 'ativa' if aba=='fluxo' }}">Fluxo de caixa</a>
+    <a href="/empreendimento/{{ emp.id }}/importar" class="{{ 'ativa' if aba=='importar' }}">Importar do Sienge</a>
+  </nav>
+  {% endif %}
+</header>
+<main>{% block conteudo %}{% endblock %}</main>
+<div id="dica"></div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

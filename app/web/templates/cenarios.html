@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block titulo %}Cenários — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+<h1>Comparação de cenários</h1>
+<p class="sub">
+  Os cenários compartilham cadastro, carteira e obra. O que muda entre eles é o
+  preço do estoque, a velocidade de vendas e a tabela de parcelamento.
+</p>
+
+<div class="rolagem">
+<table>
+  <thead>
+    <tr>
+      <th style="min-width:210px">Indicador</th>
+      {% for c in cenarios %}
+      <th class="n">
+        {{ c.nome }}
+        {% if c.tipo == 'orcado' %}<br><span class="marca-c">congelado</span>
+        {% elif c.principal %}<br><span class="marca-p">principal</span>{% endif %}
+      </th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Preço do estoque</td>
+      {% for c in cenarios %}<td class="n">{{ c.preco_m2|moeda(0) }} R$/m²</td>{% endfor %}
+    </tr>
+    <tr>
+      <td>Unidades no plano de vendas</td>
+      {% for c in cenarios %}<td class="n">{{ c.unidades_plano or '—' }}</td>{% endfor %}
+    </tr>
+    {% for rotulo, campo, formato in metricas %}
+    <tr class="{{ 'total' if campo in ('lucro','margem') }}">
+      <td>{{ rotulo }}</td>
+      {% for c in cenarios %}
+        {% set v = c[campo] %}
+        <td class="n {{ 'neg' if v is not none and v < 0 }}">
+          {%- if v is none %}—
+          {%- elif formato == 'moeda_m' %}{{ v|milhoes }} M
+          {%- elif formato == 'perc' %}{{ v|percentual }}
+          {%- else %}{{ v|moeda(0) }}{% endif -%}
+        </td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    <tr>
+      <td>Mês da exposição máxima</td>
+      {% for c in cenarios %}<td class="n fraco">{{ c.mes_exposicao|mes }}</td>{% endfor %}
+    </tr>
+    <tr>
+      <td>Última rodada</td>
+      {% for c in cenarios %}
+      <td class="n fraco">{{ c.executada_em.strftime('%d/%m/%y %H:%M') if c.executada_em else '—' }}</td>
+      {% endfor %}
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p class="legenda-tab">
+  Valores em reais. <strong>TIR</strong> aparece como “—” quando o fluxo troca de
+  sinal mais de uma vez e não existe raiz real — que é o caso desta SPE, por causa
+  do intervalo entre o fim da obra e o recebimento das chaves. Nesses casos a
+  <strong>MTIR</strong> é o indicador de retorno utilizável: ela reinveste os
+  excedentes à TMA em vez de à própria taxa interna.
+</p>
+
+<h2>O que cada cenário assume</h2>
+<div class="cartoes">
+{% for c in cenarios %}
+  <div class="cartao">
+    <h3>{{ c.nome }}</h3>
+    <div class="meta">mês base {{ c.mes_base|mes }} ·
+      {% if c.tipo == 'orcado' %}congelado no lançamento{% else %}projeção{% endif %}</div>
+    <div class="linhas">
+      <span>Preço do estoque</span><span>{{ c.preco_m2|moeda(0) }} R$/m²</span>
+      <span>VGV resultante</span><span>R$ {{ c.vgv|milhoes }} M</span>
+      <span>Lucro</span><span>R$ {{ c.lucro|milhoes }} M</span>
+      <span>Margem</span><span>{{ c.margem|percentual }}</span>
+      <span>Aporte necessário</span><span>R$ {{ c.aporte_necessario|milhoes }} M</span>
+    </div>
+    <p style="margin:.9rem 0 0">
+      <a class="botao" href="/empreendimento/{{ emp.id }}/fluxo?cenario={{ c.id }}">Ver fluxo de caixa</a>
+    </p>
+  </div>
+{% endfor %}
+</div>
+
+{% endblock %}

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block titulo %}Fluxo de caixa — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+<h1>Fluxo de caixa</h1>
+<p class="sub">
+  Entradas da carteira vendida e do estoque projetado contra o desembolso da obra,
+  taxas e despesas — mês a mês, no cenário escolhido.
+</p>
+
+<form class="acoes" method="get">
+  <label class="campo">Cenário
+    <select name="cenario" onchange="this.form.submit()">
+      {% for c in cenarios %}
+      <option value="{{ c.id }}" {{ 'selected' if c.id == escolhido }}>
+        {{ c.nome }}{% if c.tipo == 'orcado' %} (congelado){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Trocar</button></noscript>
+</form>
+
+<dl class="painel">
+  <div class="cel neg"><dt>Exposição máxima</dt>
+    <dd>{{ ind.exposicao_maxima|milhoes }}<small>R$ M · {{ ind.mes_exposicao|mes }}</small></dd></div>
+  <div class="cel"><dt>Aporte necessário</dt>
+    <dd>{{ ind.aporte_necessario|milhoes }}<small>R$ M</small></dd></div>
+  <div class="cel"><dt>VPL @ TMA</dt><dd>{{ ind.vpl|milhoes }}<small>R$ M</small></dd></div>
+  <div class="cel"><dt>MTIR</dt><dd>{{ ind.mtir_anual|percentual }}<small>a.a.</small></dd></div>
+  <div class="cel"><dt>TIR</dt>
+    <dd>{% if ind.tir_anual %}{{ ind.tir_anual|percentual }}{% else %}—{% endif %}
+      <small>{% if not ind.tir_anual %}sem raiz real{% else %}a.a.{% endif %}</small></dd></div>
+  <div class="cel"><dt>Lucro</dt><dd>{{ dre.lucro|milhoes }}<small>R$ M</small></dd></div>
+</dl>
+
+<!-- ------------------------------------------------ movimento mensal -->
+<figure>
+  <div class="cabeca">
+    <h3>Movimento mensal</h3>
+    <div class="chaves">
+      <span><i style="background:var(--entrada)"></i>Entradas</span>
+      <span><i style="background:var(--saida)"></i>Saídas</span>
+    </div>
+  </div>
+  <div class="tela">
+    <svg viewBox="0 0 {{ grafico_mov.w }} {{ grafico_mov.h }}" role="img"
+         aria-label="Barras do movimento mensal de caixa: entradas acima da linha zero, saídas abaixo, de {{ serie[0].mes.year }} a {{ serie[-1].mes.year }}.">
+      {% for e in grafico_mov.escala %}
+      <line class="grade" x1="44" y1="{{ e.y }}" x2="{{ grafico_mov.w - 16 }}" y2="{{ e.y }}"/>
+      <text class="eixo" x="38" y="{{ e.y + 3 }}" text-anchor="end">{{ e.rotulo }}</text>
+      {% endfor %}
+      <line class="zero" x1="44" y1="{{ grafico_mov.zero }}" x2="{{ grafico_mov.w - 16 }}" y2="{{ grafico_mov.zero }}"/>
+      {% for b in grafico_mov.barras %}
+        {% if b.h_ent > 0.4 %}
+        <rect x="{{ b.x }}" y="{{ b.y_ent }}" width="{{ b.lg }}" height="{{ b.h_ent }}"
+              rx="2" fill="var(--entrada)"/>
+        {% endif %}
+        {% if b.h_sai > 0.4 %}
+        <rect x="{{ b.x }}" y="{{ b.y_sai }}" width="{{ b.lg }}" height="{{ b.h_sai }}"
+              rx="2" fill="var(--saida)"/>
+        {% endif %}
+        <rect class="alvo" x="{{ b.x - 1 }}" y="{{ 26 }}" width="{{ b.lg + 2 }}"
+              height="{{ grafico_mov.h - 56 }}"
+              data-mes="{{ b.mes|mes }}" data-ent="{{ b.entrada|moeda(0) }}"
+              data-sai="{{ b.saida|moeda(0) }}" data-mov="{{ b.movimento|moeda(0) }}"
+              data-saldo="{{ b.saldo|moeda(0) }}"/>
+      {% endfor %}
+      {% for r in grafico_mov.rotulos %}
+      <text class="eixo" x="{{ r.x }}" y="{{ grafico_mov.h - 8 }}"
+            text-anchor="{{ 'end' if loop.last and r.x > grafico_mov.w - 60 else 'start' }}">{{ r.texto }}</text>
+      {% endfor %}
+      <text class="eixo" x="44" y="14">R$ milhões</text>
+    </svg>
+  </div>
+  <figcaption>
+    O vale de entradas entre o fim da obra e a entrega é característico de tabela com
+    20% nas chaves: as mensais da carteira acabam antes do repasse começar.
+  </figcaption>
+</figure>
+
+<!-- ------------------------------------------------ saldo acumulado -->
+<figure>
+  <div class="cabeca">
+    <h3>Saldo de caixa acumulado</h3>
+    <span class="rotulo">vale em {{ grafico_saldo.vale.mes|mes }}</span>
+  </div>
+  <div class="tela">
+    <svg viewBox="0 0 {{ grafico_saldo.w }} {{ grafico_saldo.h }}" role="img"
+         aria-label="Linha do saldo de caixa acumulado, com o pior momento marcado em {{ grafico_saldo.vale.mes|mes }}.">
+      {% for e in grafico_saldo.escala %}
+      <line class="grade" x1="44" y1="{{ e.y }}" x2="{{ grafico_saldo.w - 16 }}" y2="{{ e.y }}"/>
+      <text class="eixo" x="38" y="{{ e.y + 3 }}" text-anchor="end">{{ e.rotulo }}</text>
+      {% endfor %}
+      <!-- a área só existe abaixo do zero: é o período de caixa negativo,
+           e é ele que a legenda descreve -->
+      <clipPath id="abaixo-do-zero">
+        <rect x="44" y="{{ grafico_saldo.zero }}" width="{{ grafico_saldo.w - 60 }}"
+              height="{{ grafico_saldo.h - grafico_saldo.zero }}"/>
+      </clipPath>
+      <path d="{{ grafico_saldo.area }}" fill="var(--saida)" opacity=".14"
+            clip-path="url(#abaixo-do-zero)"/>
+      <line class="zero" x1="44" y1="{{ grafico_saldo.zero }}" x2="{{ grafico_saldo.w - 16 }}" y2="{{ grafico_saldo.zero }}"/>
+      <path d="{{ grafico_saldo.linha }}" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="{{ grafico_saldo.vale.x }}" cy="{{ grafico_saldo.vale.y }}" r="5"
+              fill="var(--saida)" stroke="var(--papel-2)" stroke-width="2"/>
+      <text class="eixo" x="{{ grafico_saldo.vale.x + 10 }}" y="{{ grafico_saldo.vale.y + 4 }}"
+            fill="var(--saida)" font-weight="600">
+        {{ grafico_saldo.vale.valor|milhoes }} M · {{ grafico_saldo.vale.mes|mes }}
+      </text>
+      {% for p in grafico_saldo.pontos %}
+      <rect class="alvo" x="{{ p.x - 4 }}" y="26" width="8" height="{{ grafico_saldo.h - 56 }}"
+            data-mes="{{ p.mes|mes }}" data-ent="{{ p.entrada|moeda(0) }}"
+            data-sai="{{ p.saida|moeda(0) }}" data-mov="{{ p.movimento|moeda(0) }}"
+            data-saldo="{{ p.saldo|moeda(0) }}"/>
+      {% endfor %}
+      {% for r in grafico_saldo.rotulos %}
+      <text class="eixo" x="{{ r.x }}" y="{{ grafico_saldo.h - 8 }}"
+            text-anchor="{{ 'end' if loop.last and r.x > grafico_saldo.w - 60 else 'start' }}">{{ r.texto }}</text>
+      {% endfor %}
+      <text class="eixo" x="44" y="14">R$ milhões</text>
+    </svg>
+  </div>
+  <figcaption>
+    A área sombreada é o período em que a SPE opera com caixa negativo — é ela que
+    define o aporte ou o financiamento à produção necessário.
+  </figcaption>
+</figure>
+
+<!-- ------------------------------------------------ tabela (acessibilidade) -->
+<h2>Por ano</h2>
+<div class="rolagem">
+<table>
+  <thead><tr>
+    <th>Ano</th><th class="n">Entradas</th><th class="n">Saídas</th>
+    <th class="n">Desembolso da obra</th><th class="n">Saldo em dezembro</th>
+  </tr></thead>
+  <tbody>
+  {% for ano, v in por_ano %}
+    <tr>
+      <td class="mono">{{ ano }}</td>
+      <td class="n">{{ v.entrada|moeda(0) }}</td>
+      <td class="n neg">{{ v.saida|moeda(0) }}</td>
+      <td class="n neg">{{ v.obra|moeda(0) }}</td>
+      <td class="n {{ 'neg' if v.saldo < 0 }}">{{ v.saldo|moeda(0) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="legenda-tab">Valores em reais. A tabela é a mesma série dos gráficos, agregada por ano.</p>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// dica de leitura: um só handler para os dois gráficos
+(function () {
+  const dica = document.getElementById('dica');
+  const linha = (r, v) => `<div class="l"><span>${r}</span><span>${v}</span></div>`;
+  document.addEventListener('mouseover', e => {
+    const alvo = e.target.closest('.alvo');
+    if (!alvo) return;
+    dica.innerHTML = `<div class="m">${alvo.dataset.mes}</div>`
+      + linha('Entradas', alvo.dataset.ent)
+      + linha('Saídas', alvo.dataset.sai)
+      + linha('Movimento', alvo.dataset.mov)
+      + linha('Saldo', alvo.dataset.saldo);
+    dica.style.opacity = 1;
+  });
+  document.addEventListener('mousemove', e => {
+    if (dica.style.opacity !== '1') return;
+    const l = Math.min(e.clientX + 14, window.innerWidth - dica.offsetWidth - 10);
+    const t = Math.min(e.clientY + 14, window.innerHeight - dica.offsetHeight - 10);
+    dica.style.left = l + 'px';
+    dica.style.top = t + 'px';
+  });
+  document.addEventListener('mouseout', e => {
+    if (e.target.closest('.alvo')) dica.style.opacity = 0;
+  });
+})();
+</script>
+{% endblock %}

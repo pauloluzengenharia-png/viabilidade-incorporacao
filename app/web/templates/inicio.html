@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block titulo %}Empreendimentos{% endblock %}
+{% block conteudo %}
+<h1>Empreendimentos</h1>
+<p class="sub">Cada SPE com os indicadores do cenário marcado como principal.</p>
+
+{% if not empreendimentos %}
+  <div class="aviso"><span><b>Nenhum empreendimento ainda.</b>
+    Rode <code>python3 migrar_kiev.py dados/kiev.xlsx</code> para carregar o primeiro.</span></div>
+{% endif %}
+
+<div class="cartoes">
+{% for e in empreendimentos %}
+  <a class="cartao" href="/empreendimento/{{ e.id }}">
+    <h3>{{ e.nome }}</h3>
+    <div class="meta">{{ e.unidades }} unidades · {{ e.area_privativa|moeda(0) }} m² privativos
+      {%- if e.executada_em %} · calculado em {{ e.executada_em.strftime('%d/%m/%Y') }}{% endif %}</div>
+    <div class="linhas">
+      <span>VGV</span><span>R$ {{ e.vgv|milhoes }} M</span>
+      <span>Lucro</span><span>R$ {{ e.lucro|milhoes }} M</span>
+      <span>Margem</span><span>{{ e.margem|percentual }}</span>
+      <span>Exposição máxima</span><span>R$ {{ e.exposicao_maxima|milhoes }} M</span>
+    </div>
+  </a>
+{% endfor %}
+</div>
+{% endblock %}

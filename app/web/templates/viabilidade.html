@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block titulo %}Viabilidade — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+<h1>Viabilidade</h1>
+<p class="sub">
+  Orçado no lançamento × atualizado hoje × realizado em caixa.
+  O realizado considera os movimentos até <strong>{{ corte|mes }}</strong>;
+  a projeção começa no mês seguinte.
+</p>
+
+{% if ind %}
+<dl class="painel">
+  <div class="cel"><dt>VGV</dt><dd>{{ ind.vgv|milhoes }}<small>R$ M</small></dd></div>
+  <div class="cel"><dt>Receita líquida</dt><dd>{{ ind.receita_liquida|milhoes }}<small>R$ M</small></dd></div>
+  <div class="cel"><dt>Lucro</dt><dd>{{ ind.lucro|milhoes }}<small>R$ M</small></dd></div>
+  <div class="cel"><dt>Margem</dt><dd>{{ ind.margem|percentual }}</dd></div>
+  <div class="cel neg"><dt>Exposição máxima</dt>
+    <dd>{{ ind.exposicao_maxima|milhoes }}<small>R$ M · {{ ind.mes_exposicao|mes }}</small></dd></div>
+  <div class="cel"><dt>Custo raso / m²</dt><dd>{{ ind.custo_m2_privativa|moeda(0) }}<small>R$/m²</small></dd></div>
+</dl>
+{% endif %}
+
+{% if pendentes.n %}
+<div class="aviso">
+  <span><b>{{ pendentes.n }} lançamento(s) sem classificação</b>, somando
+  R$ {{ pendentes.v|moeda(2) }}. Eles entraram no banco mas caem em “A CLASSIFICAR”
+  e não aparecem em nenhuma linha do resultado até receberem uma conta.</span>
+</div>
+{% endif %}
+
+<form class="acoes" method="get">
+  <label class="campo">Realizado até
+    <input type="date" name="ate" value="{{ corte }}">
+  </label>
+  <button type="submit">Aplicar corte</button>
+  <span style="flex:1"></span>
+</form>
+<form class="acoes" method="post" action="/empreendimento/{{ emp.id }}/recalcular">
+  <button class="principal" type="submit">Recalcular todos os cenários</button>
+  <span class="rotulo">{% if ind %}última rodada em
+    {{ ind.executada_em.strftime('%d/%m/%Y %H:%M') }} · cenário {{ ind.cenario }}{% endif %}</span>
+</form>
+
+<div class="rolagem">
+<table>
+  <thead>
+    <tr>
+      <th>Conta</th>
+      <th class="n">Orçado</th>
+      <th class="n">Atualizado</th>
+      <th class="n">% da receita</th>
+      <th class="n">Variação</th>
+      <th class="n">Realizado</th>
+      <th class="n">A realizar</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in linhas %}
+    <tr class="{{ 'total' if l.destaque }}">
+      <td>{{ l.linha }}</td>
+      <td class="n {{ 'neg' if l.orcado < 0 }}">{{ l.orcado|moeda(0) }}</td>
+      <td class="n {{ 'neg' if l.atualizado < 0 }}">{{ l.atualizado|moeda(0) }}</td>
+      <td class="n fraco">{{ l.perc_vv|percentual }}</td>
+      <td class="n {{ 'fraco' if l.variacao is none }}">
+        {%- if l.variacao is none %}—{% else %}{{ l.variacao|percentual }}{% endif -%}
+      </td>
+      <td class="n {{ 'neg' if l.realizado < 0 }}">{{ l.realizado|moeda(0) }}</td>
+      <td class="n {{ 'neg' if l.a_realizar < 0 }}">{{ l.a_realizar|moeda(0) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="legenda-tab">
+  Valores em reais. <strong>Orçado</strong> é o cenário congelado no lançamento e não
+  muda; <strong>atualizado</strong> é a última rodada do cenário principal;
+  <strong>realizado</strong> vem dos movimentos do Sienge classificados em cada conta.
+  Variação = atualizado ÷ orçado − 1.
+</p>
+
+{% endblock %}

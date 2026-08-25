@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}Importar — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+<h1>Importar do Sienge</h1>
+<p class="sub">
+  Envie o mesmo export que hoje vira uma aba da planilha. O importador normaliza
+  os campos e grava; quando a integração por API entrar, só a origem muda — as
+  regras de leitura são as mesmas.
+</p>
+
+<div class="aviso">
+  <span><b>O que cada fonte alimenta.</b>
+  <em>Unidades</em> e <em>Contratos</em> formam o cadastro;
+  <em>Receber</em> e <em>Recebido</em> formam a carteira, que é a entrada de caixa
+  projetada da parte já vendida; <em>Fin_Obra</em> é o incorrido, que preenche a
+  coluna “realizado” da viabilidade.</span>
+</div>
+
+<form class="acoes" method="post" enctype="multipart/form-data"
+      action="/empreendimento/{{ emp.id }}/importar">
+  <label class="campo">Fonte
+    <select name="fonte" required>
+      <option value="unidades">Unidades — cadastro e situação comercial</option>
+      <option value="contratos">Contratos — valor, cliente e data</option>
+      <option value="receber">Receber — parcelas a vencer</option>
+      <option value="recebido">Recebido — parcelas quitadas</option>
+      <option value="fin_obra">Fin_Obra — movimentação bancária (incorrido)</option>
+    </select>
+  </label>
+  <label class="campo">Aba (opcional)
+    <input type="text" name="aba" placeholder="primeira aba" style="padding:.4rem .6rem;
+      border:1px solid var(--fio-forte); border-radius:5px; background:var(--papel-2);
+      color:var(--tinta); font-family:inherit; font-size:.84rem">
+  </label>
+  <label class="campo">Arquivo
+    <input type="file" name="arquivo" accept=".xlsx,.xlsm" required>
+  </label>
+  <button class="principal" type="submit">Importar</button>
+</form>
+
+<h2>Histórico</h2>
+{% if not historico %}
+  <p class="sub">Nenhuma importação registrada.</p>
+{% else %}
+<div class="rolagem">
+<table>
+  <thead><tr>
+    <th>Quando</th><th>Fonte</th><th>Origem</th><th>Arquivo</th>
+    <th class="n">Lidas</th><th class="n">Gravadas</th><th>Avisos</th>
+  </tr></thead>
+  <tbody>
+  {% for h in historico %}
+    <tr>
+      <td class="mono">{{ h.importado_em.strftime('%d/%m/%y %H:%M') }}</td>
+      <td>{{ h.fonte }}</td>
+      <td><span class="marca-c">{{ h.origem }}</span></td>
+      <td class="fraco">{{ h.arquivo or '—' }}</td>
+      <td class="n">{{ h.linhas_lidas }}</td>
+      <td class="n {{ 'neg' if h.linhas_gravadas < h.linhas_lidas }}">{{ h.linhas_gravadas }}</td>
+      <td class="fraco">
+        {%- if h.avisos %}{{ h.avisos|length }} — {{ h.avisos[0] }}
+        {%- else %}—{% endif -%}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="legenda-tab">
+  Linhas gravadas menores que lidas significam registros descartados — parcela sem
+  data, valor zerado ou unidade que não existe no cadastro. O aviso diz qual.
+</p>
+{% endif %}
+
+{% endblock %}
