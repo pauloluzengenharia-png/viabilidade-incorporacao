@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% block titulo %}Novo estudo · MMI Viabilidade{% endblock %}
+
+{% macro campo(nome, rotulo, valor='', tipo='text', sufixo='', obrigatorio=false) %}
+  {% set v = ajuda(nome) %}
+  <div class="campo-bloco">
+    <label class="campo {{ 'numerico' if tipo == 'number' }}">
+      <span class="rot">{{ rotulo }}{% if sufixo %} <span class="fraco">{{ sufixo }}</span>{% endif %}</span>
+      <input type="{{ tipo }}" name="{{ nome }}" value="{{ valor }}"
+             {% if tipo == 'number' %}step="any"{% endif %}
+             {{ 'required' if obrigatorio }}>
+    </label>
+    {% if v %}
+    <details class="ajuda so-marca">
+      <summary title="O que é: {{ v.titulo }}" aria-label="O que é: {{ v.titulo }}"></summary>
+      <div class="texto">
+        <b>{{ v.titulo }}.</b> {{ v.o_que }}
+        {%- if v.como %} <b>Como preencher:</b> {{ v.como }}{% endif %}
+        {%- if v.exemplo %} <b>Na Kiev:</b> {{ v.exemplo }}{% endif %}
+        {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado }}{% endif %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+{% endmacro %}
+
+{% block conteudo %}
+
+<div class="regua"></div>
+<h1>Novo estudo de viabilidade</h1>
+<p class="sub">
+  Para um terreno em avaliação ou um lançamento que ainda vai à diretoria. Você
+  preenche as premissas, o sistema monta o estudo completo — VGV, resultado,
+  fluxo de caixa mês a mês, exposição, VPL e MTIR — e a partir daí o estudo é
+  editável. Todo campo tem um <strong>?</strong> no canto: ele explica o que
+  aquele número é, como preencher, quanto era na Kiev e o que costuma dar errado
+  ali.
+</p>
+
+<div class="passos">
+  <a href="#empreendimento" class="feito">1 · Empreendimento</a>
+  <a href="#produto" class="feito">2 · Produto e preço</a>
+  <a href="#tabela" class="feito">3 · Tabela de venda</a>
+  <a href="#vendas" class="feito">4 · Velocidade</a>
+  <a href="#obra" class="feito">5 · Obra</a>
+  <a href="#terreno" class="feito">6 · Terreno</a>
+  <a href="#custos" class="feito">7 · Taxas e despesas</a>
+  <a href="#fecho" class="feito">8 · Correção e TMA</a>
+</div>
+
+{% if erros %}
+<div class="aviso">
+  <span><b>Falta acertar {{ erros|length }} coisa(s) antes de calcular.</b>
+    <ul style="margin:.6rem 0 0; padding-left:1.1rem">
+      {% for e in erros %}<li style="margin-bottom:.3rem">{{ e }}</li>{% endfor %}
+    </ul>
+  </span>
+</div>
+{% endif %}
+
+<form method="post" action="/novo" class="formulario">
+
+<section class="grupo" id="empreendimento">
+  <h3>1 · O empreendimento</h3>
+  <p class="nota">Identifica a SPE e delimita o que entra na conta. A área
+    privativa é a base do preço por m² e do custo por m² — é o campo que mais
+    contamina o resto se estiver errado.</p>
+  <div class="linha-campos">
+    {{ campo('nome', 'Nome do empreendimento', d.nome, obrigatorio=true) }}
+    {{ campo('sienge_enterprise_id', 'Código no Sienge', d.sienge_enterprise_id or '', 'number', 'opcional') }}
+    {{ campo('area_privativa', 'Área privativa total', d.area_privativa or '', 'number', 'm²', true) }}
+    {{ campo('area_construida', 'Área construída total', d.area_construida or '', 'number', 'm²', true) }}
+    {{ campo('data_lancamento', 'Lançamento', d.data_lancamento or '', 'date', '', true) }}
+    {{ campo('data_entrega_prevista', 'Entrega prevista (chaves)', d.data_entrega_prevista or '', 'date', '', true) }}
+  </div>
+</section>
+
+<section class="grupo" id="produto">
+  <h3>2 · Produto e preço</h3>
+  <p class="nota">Nesta fase o estoque nasce homogêneo: o sistema cria as
+    unidades com a área média e o preço de tabela abaixo. Quando o cadastro real
+    chegar do Sienge, a importação substitui essas unidades pelas de verdade —
+    o estudo continua o mesmo.</p>
+  <div class="linha-campos">
+    {{ campo('unidades', 'Número de unidades', d.unidades or '', 'number', 'unidades', true) }}
+    {{ campo('preco_m2_estoque', 'Preço do estoque', d.preco_m2 or '', 'number', 'R$/m²', true) }}
+  </div>
+</section>
+
+<section class="grupo" id="tabela">
+  <h3>3 · Tabela de venda</h3>
+  <p class="nota">De cada R$ 100 que o cliente assina, quanto entra em cada
+    momento. A soma tem de dar exatamente 100% — digite em fração:
+    <code>0,06</code> para 6%.</p>
+  <div class="linha-campos">
+    {{ campo('comissao', 'Comissão', d.comissao, 'number', '% do bruto') }}
+    {{ campo('ato', 'Ato', d.ato, 'number', '% do bruto') }}
+    {{ campo('mensais', 'Mensais', d.mensais, 'number', '% do bruto') }}
+    {{ campo('n_mensais', 'Nº de parcelas mensais', d.n_mensais, 'number', 'meses') }}
+    {{ campo('semestrais', 'Semestrais', d.semestrais, 'number', '% do bruto') }}
+    {{ campo('anuais', 'Anuais', d.anuais, 'number', '% do bruto') }}
+    {{ campo('unica', 'Parcela única', d.unica, 'number', '% do bruto') }}
+    {{ campo('chaves', 'Chaves (repasse)', d.chaves, 'number', '% do bruto') }}
+  </div>
+  <div class="soma" id="soma-tabela">
+    <span>Soma da tabela de venda</span>
+    <span class="valor">—</span>
+  </div>
+</section>
+
+<section class="grupo" id="vendas">
+  <h3>4 · Velocidade de vendas</h3>
+  <p class="nota">Quantas unidades saem por mês. É a premissa que o mercado
+    controla e você não — vale rodar depois um cenário mais lento só para ver o
+    que acontece com a exposição.</p>
+  <div class="linha-campos">
+    {{ campo('inicio_vendas', 'Início das vendas', d.inicio_vendas or '', 'date', 'padrão: o lançamento') }}
+    {{ campo('unidades_por_mes', 'Unidades por mês', d.unidades_por_mes, 'number', 'unidades/mês') }}
+  </div>
+</section>
+
+<section class="grupo" id="obra">
+  <h3>5 · Obra</h3>
+  <p class="nota">Duas coisas separadas: <b>quanto</b> custa e <b>quando</b> é
+    desembolsado. A curva não muda o custo — muda o caixa, e é aí que ela
+    aparece.</p>
+  <div class="linha-campos">
+    {{ campo('custo_raso', 'Custo raso total', d.custo_raso or '', 'number', 'R$', true) }}
+    {{ campo('inicio_obra', 'Início da obra', d.inicio_obra or '', 'date', 'padrão: o lançamento') }}
+    {{ campo('meses_obra', 'Duração da obra', d.meses_obra, 'number', 'meses') }}
+    <div class="campo-bloco"><label class="campo">
+      <span class="rot">Formato da curva física</span>
+      <select name="formato_curva">
+        {% for k, rot in formatos.items() %}
+        <option value="{{ k }}" {{ 'selected' if d.formato_curva == k }}>{{ rot }}</option>
+        {% endfor %}
+      </select></label>
+      <details class="ajuda so-marca">
+        <summary title="O que é: formato da curva" aria-label="O que é: formato da curva"></summary>
+        <div class="texto"><b>Formato da curva física.</b> Como o custo se distribui ao longo da obra. Obra
+          vertical raramente avança em linha reta: começa devagar na fundação,
+          acelera na estrutura e desacelera no acabamento — daí a curva S. Se
+          você já tem o cronograma físico-financeiro detalhado, escolha qualquer
+          uma agora e substitua depois pelo orçamento real.</div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="grupo" id="terreno">
+  <h3>6 · Terreno</h3>
+  <p class="nota">A parte paga em dinheiro, parcela a parcela. A permuta não
+    entra aqui: ela vem das unidades marcadas como permuta no cadastro, porque é
+    custo do estudo mas não é saída de caixa.</p>
+  <div class="linha-campos">
+    {% for i in range(1, 7) %}
+    <label class="campo numerico"><span class="rot">Parcela {{ i }} — valor <span class="fraco">R$</span></span>
+      <input type="number" step="any" name="terreno_valor_{{ i }}"
+             value="{{ d.terreno_parcelas[i-1][0] if d.terreno_parcelas|length >= i else '' }}">
+    </label>
+    <label class="campo"><span class="rot">Parcela {{ i }} — vencimento</span>
+      <input type="date" name="terreno_venc_{{ i }}"
+             value="{{ d.terreno_parcelas[i-1][1] if d.terreno_parcelas|length >= i else '' }}">
+    </label>
+    {% endfor %}
+    {{ campo('terreno_registro_perc', 'Registro e ITBI', d.terreno_registro_perc, 'number', '% do pagamento') }}
+  </div>
+</section>
+
+<section class="grupo" id="custos">
+  <h3>7 · Taxas e despesas</h3>
+  <p class="nota">Percentuais em fração (<code>0,045</code> = 4,5%); valores
+    fixos em reais.</p>
+  <div class="linha-campos">
+    {{ campo('ret', 'Impostos (RET)', d.ret, 'number', '% da receita') }}
+    {{ campo('distratos', 'Distratos', d.distratos, 'number', '% da receita') }}
+    {{ campo('taxa_adm_obra', 'Taxa de adm. — obra', d.taxa_adm_obra, 'number', '% do custo raso') }}
+    {{ campo('taxa_viabilizacao', 'Taxa de adm. — carteira', d.taxa_viabilizacao, 'number', '% da receita') }}
+    {{ campo('outras_desp_adm_perc', 'Outras despesas adm.', d.outras_desp_adm_perc, 'number', '% do custo raso') }}
+    {{ campo('despesas_comerciais', 'Despesas comerciais', d.despesas_comerciais, 'number', 'R$') }}
+    {{ campo('decoracao', 'Decoração', d.decoracao, 'number', 'R$') }}
+    {{ campo('projetos_e_outros', 'Projetos e outros', d.projetos_e_outros, 'number', 'R$') }}
+    {{ campo('marketing_stand', 'Marketing — stand', d.marketing_stand, 'number', 'R$') }}
+    {{ campo('marketing_propaganda', 'Marketing — propaganda', d.marketing_propaganda, 'number', 'R$') }}
+    {{ campo('outras_entradas', 'Outras receitas adm.', d.outras_entradas, 'number', 'R$') }}
+  </div>
+</section>
+
+<section class="grupo" id="fecho">
+  <h3>8 · Correção monetária e TMA</h3>
+  <p class="nota">Deixar os índices vazios projeta em valores nominais — que é o
+    que a planilha fazia. Ligar a correção costuma <b>piorar</b> a exposição, não
+    melhorar: o mesmo INCC que reajusta a parcela do cliente encarece o concreto,
+    e o concreto vem antes.</p>
+  <div class="linha-campos">
+    <label class="campo"><span class="rot">Índice até as chaves</span>
+      <select name="indice_ate_chaves">
+        <option value="">nenhum — projeção nominal</option>
+        {% for ix in indices %}
+        <option value="{{ ix }}" {{ 'selected' if d.indice_ate_chaves == ix }}>{{ ix }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="campo"><span class="rot">Índice depois das chaves</span>
+      <select name="indice_apos_chaves">
+        <option value="">nenhum</option>
+        {% for ix in indices %}
+        <option value="{{ ix }}" {{ 'selected' if d.indice_apos_chaves == ix }}>{{ ix }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {{ campo('indice_projetado_aa', 'Índice projetado', d.indice_projetado_aa, 'number', '% ao ano') }}
+    <label class="campo"><span class="rot">Corrigir também o custo da obra</span>
+      <select name="corrigir_custo_obra">
+        <option value="1" {{ 'selected' if d.corrigir_custo_obra }}>sim — recomendado</option>
+        <option value="0" {{ '' if d.corrigir_custo_obra else 'selected' }}>não</option>
+      </select>
+    </label>
+    {{ campo('tma_anual', 'TMA', d.tma_anual, 'number', '% ao ano') }}
+    {{ campo('meses_pos_chaves', 'Meses de pós-chaves', d.meses_pos_chaves, 'number', 'meses') }}
+  </div>
+</section>
+
+<div class="acoes">
+  <button class="principal" type="submit">Criar o estudo e calcular</button>
+  <a class="botao" href="/guia">Abrir o guia de preenchimento</a>
+</div>
+
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// A soma da tabela de venda aparece enquanto se digita. A trava de verdade está
+// no banco; isto só evita descobrir o erro depois de rolar a página inteira.
+(function () {
+  const campos = ['comissao','ato','mensais','anuais','semestrais','unica','chaves']
+        .map(n => document.querySelector(`[name="${n}"]`)).filter(Boolean);
+  const caixa = document.getElementById('soma-tabela');
+  if (!caixa || campos.length !== 7) return;
+  const valor = caixa.querySelector('.valor');
+  function conta() {
+    const s = campos.reduce((t, c) => t + (parseFloat(c.value.replace(',', '.')) || 0), 0);
+    valor.textContent = (s * 100).toFixed(2).replace('.', ',') + '%';
+    const certa = Math.abs(s - 1) < 1e-6;
+    caixa.classList.toggle('certa', certa);
+    caixa.classList.toggle('errada', !certa);
+    caixa.firstElementChild.textContent = certa
+      ? 'Soma da tabela de venda — fecha 100%'
+      : 'Soma da tabela de venda — precisa fechar 100%';
+  }
+  campos.forEach(c => c.addEventListener('input', conta));
+  conta();
+})();
+</script>
+{% endblock %}

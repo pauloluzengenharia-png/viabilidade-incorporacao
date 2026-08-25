@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block titulo %}Como preencher · MMI Viabilidade{% endblock %}
+{% block conteudo %}
+
+<div class="regua"></div>
+<h1>Como preencher cada dado do estudo</h1>
+<p class="sub">
+  Um estudo de viabilidade é feito de três tipos de número, e confundir os três
+  é a origem de quase todo erro: o que <strong>alguém decide</strong> (preço,
+  prazo, taxa), o que <strong>alguém mediu</strong> (área, orçamento, contrato)
+  e o que o <strong>sistema calcula</strong> (lucro, margem, exposição, TIR).
+  Abaixo, cada campo diz a qual dos três pertence, de onde vem e o que costuma
+  dar errado nele.
+</p>
+
+<nav class="indice">
+  {% for s in secoes %}<a href="#{{ s.slug }}">{{ s.titulo }}</a>{% endfor %}
+</nav>
+
+{% for s in secoes %}
+<section id="{{ s.slug }}">
+  <h2>{{ s.titulo }}</h2>
+  <p class="legenda-tab" style="margin:0 0 1.3rem">{{ s.resumo }}</p>
+
+  {% for v in s.verbetes %}
+  <article class="verbete">
+    <h3>
+      {{ v.titulo }}
+      {% if v.unidade %}<span class="unidade">{{ v.unidade }}</span>{% endif %}
+    </h3>
+    <p>{{ v.o_que }}</p>
+    <dl>
+      {% if v.de_onde %}<dt>De onde vem</dt><dd>{{ v.de_onde }}</dd>{% endif %}
+      {% if v.como %}<dt>Como preencher</dt><dd>{{ v.como }}</dd>{% endif %}
+      {% if v.exemplo %}<dt>Na Kiev</dt><dd class="exemplo">{{ v.exemplo }}</dd>{% endif %}
+    </dl>
+    {% if v.cuidado %}
+    <p class="cuidado"><b>Cuidado.</b> {{ v.cuidado }}</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
+
+<h2>Três regras que o banco não deixa quebrar</h2>
+<p class="legenda-tab">
+  Não são recomendações — são travas. O cadastro é recusado na hora se alguma
+  delas não fechar, porque as três produzem erros que passam despercebidos por
+  meses.
+</p>
+<div class="cartoes" style="margin-top:1.2rem">
+  <div class="cartao">
+    <h3>A tabela de venda soma 100%</h3>
+    <p class="legenda-tab" style="margin:.6rem 0 0">
+      Comissão + ato + mensais + anuais + semestrais + única + chaves. Uma
+      tabela que soma 97% dá um desconto de 3% que ninguém aprovou.</p>
+  </div>
+  <div class="cartao">
+    <h3>Cada curva física soma 100%</h3>
+    <p class="legenda-tab" style="margin:.6rem 0 0">
+      A curva distribui o custo no tempo, não muda o custo. Se somasse 95%, a
+      obra ficaria 5% mais barata sem ninguém negociar nada.</p>
+  </div>
+  <div class="cartao">
+    <h3>Unidade fora do VGV precisa de motivo</h3>
+    <p class="legenda-tab" style="margin:.6rem 0 0">
+      Tirar uma unidade da conta é uma decisão, não um esquecimento. O sistema
+      exige a justificativa escrita ao lado da exclusão.</p>
+  </div>
+</div>
+
+<h2>Por que somar as colunas do fluxo não dá a linha do resultado</h2>
+<p class="legenda-tab">
+  É a pergunta que mais aparece, e a resposta não é um erro de arredondamento.
+  São duas contas diferentes de propósito. O <strong>resultado</strong> conta o
+  empreendimento inteiro, do lançamento à última parcela, e inclui a permuta —
+  que é custo mas não é caixa, porque se paga em unidade. O <strong>fluxo</strong>
+  conta só o dinheiro que entra e sai dentro do horizonte projetado, e as
+  parcelas que caem depois do fim do horizonte ficam de fora. Por isso são duas
+  tabelas separadas no banco, e não uma soma da outra.
+</p>
+
+{% endblock %}

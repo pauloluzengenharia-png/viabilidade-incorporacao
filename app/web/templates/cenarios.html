@@ -2,10 +2,15 @@
 {% block titulo %}Cenários — {{ emp.nome }}{% endblock %}
 {% block conteudo %}
 
+<div class="regua"></div>
 <h1>Comparação de cenários</h1>
 <p class="sub">
-  Os cenários compartilham cadastro, carteira e obra. O que muda entre eles é o
-  preço do estoque, a velocidade de vendas e a tabela de parcelamento.
+  Os três cenários olham para o mesmo empreendimento: mesmo cadastro, mesma
+  carteira já vendida, mesma obra. O que muda é o que ninguém controla —
+  <strong>por quanto</strong> o estoque será vendido, <strong>em quanto tempo</strong>
+  e <strong>em quantas parcelas</strong>. Ao lado deles fica a viabilidade
+  orçada no lançamento, congelada, para medir o quanto o projeto se afastou do
+  que foi aprovado.
 </p>
 
 {% if algum_desatualizado %}

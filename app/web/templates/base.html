@@ -3,30 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block titulo %}Viabilidade{% endblock %}</title>
+<title>{% block titulo %}Viabilidade · MMI{% endblock %}</title>
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/static/mmi.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/estilo.css">
 </head>
 <body>
+
 <header class="topo">
   <div class="faixa">
-    <a class="marca" href="/">Viabilidade <span>· incorporação</span></a>
-    {% if emp is defined and emp %}<span class="rotulo">{{ emp.nome }}</span>{% endif %}
+    <a class="marca" href="/">
+      {% include "_logo.html" %}
+      <span class="divisa"></span>
+      <span>Viabilidade de incorporação</span>
+    </a>
     <span style="flex:1"></span>
-    <a href="/sair" class="rotulo" style="text-decoration:none">Sair</a>
+    {% if emp is defined and emp %}<span class="obra">{{ emp.nome }}</span>{% endif %}
+    <a href="/guia" class="sair">Guia</a>
+    <a href="/sair" class="sair">Sair</a>
   </div>
-  {% if emp is defined and emp %}
-  <nav class="abas">
-    <a href="/empreendimento/{{ emp.id }}" class="{{ 'ativa' if aba=='viabilidade' }}">Viabilidade</a>
-    <a href="/empreendimento/{{ emp.id }}/cenarios" class="{{ 'ativa' if aba=='cenarios' }}">Cenários</a>
-    <a href="/empreendimento/{{ emp.id }}/fluxo" class="{{ 'ativa' if aba=='fluxo' }}">Fluxo de caixa</a>
-    <a href="/empreendimento/{{ emp.id }}/importar" class="{{ 'ativa' if aba=='importar' }}">Importar do Sienge</a>
-  </nav>
-  {% endif %}
 </header>
+
+{% if emp is defined and emp %}
+<nav class="abas"><div class="interno">
+  <a href="/empreendimento/{{ emp.id }}" class="{{ 'ativa' if aba=='viabilidade' }}">Viabilidade</a>
+  <a href="/empreendimento/{{ emp.id }}/cenarios" class="{{ 'ativa' if aba=='cenarios' }}">Cenários</a>
+  <a href="/empreendimento/{{ emp.id }}/fluxo" class="{{ 'ativa' if aba=='fluxo' }}">Fluxo de caixa</a>
+  <a href="/empreendimento/{{ emp.id }}/importar" class="{{ 'ativa' if aba=='importar' }}">Importar do Sienge</a>
+</div></nav>
+{% endif %}
+
 <main>{% block conteudo %}{% endblock %}</main>
+
+<footer class="rodape"><div class="interno">
+  {% include "_logo.html" %}
+  <span>MMI Incorporações · sistema de viabilidade</span>
+  <span style="flex:1"></span>
+  <a href="/guia">Como preencher cada dado</a>
+</div></footer>
+
 <div id="dica"></div>
 {% block scripts %}{% endblock %}
 </body>

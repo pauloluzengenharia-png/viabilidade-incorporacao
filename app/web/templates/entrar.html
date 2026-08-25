@@ -3,41 +3,24 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Entrar — Viabilidade</title>
+<title>Entrar · MMI Viabilidade</title>
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="/static/mmi.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/estilo.css">
-<style>
-  body{display:grid;place-items:center;min-height:100vh;padding:2rem}
-  .porta{width:100%;max-width:360px}
-  .porta h1{font-size:1.35rem;margin:0 0 .25rem;letter-spacing:-.022em}
-  .porta .sub{margin:0 0 1.8rem;font-size:.88rem}
-  .porta form{display:flex;flex-direction:column;gap:.9rem;
-    border:1px solid var(--fio);border-radius:6px;background:var(--papel-2);
-    padding:1.3rem}
-  .porta label{display:flex;flex-direction:column;gap:.35rem;font-size:.76rem;
-    font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--tinta-3)}
-  .porta input{font-family:"IBM Plex Mono",monospace;font-size:.95rem;
-    padding:.55rem .7rem;border:1px solid var(--fio-forte);border-radius:5px;
-    background:var(--papel);color:var(--tinta)}
-  .porta input:focus{outline:2px solid var(--premissa);outline-offset:1px;
-    border-color:var(--premissa)}
-  .porta button{margin-top:.3rem;padding:.6rem;font-size:.9rem;font-weight:600}
-  .erro{display:flex;gap:.6rem;padding:.7rem .9rem;border-radius:5px;font-size:.85rem;
-    border:1px solid var(--realizado);background:var(--realizado-fraco);
-    color:var(--tinta);margin-bottom:1rem;line-height:1.45}
-  .rodape{margin-top:1.4rem;font-size:.78rem;color:var(--tinta-3);line-height:1.55}
-</style>
 </head>
-<body>
-<div class="porta">
-  <span class="rotulo">Viabilidade · incorporação</span>
-  <h1>Entrar</h1>
-  <p class="sub">Os dados de viabilidade e incorrido das SPEs ficam atrás desta tela.</p>
+<body class="porta">
+<div class="caixa">
+
+  <div class="marca">{% include "_logo.html" %}</div>
+
+  <h1>Viabilidade de incorporação</h1>
+  <p class="sub">Os estudos e o incorrido das SPEs da MMI ficam atrás desta tela.</p>
 
   {% if erro %}
-  <div class="erro"><span>{{ erro }}</span></div>
+  <div class="erro">{{ erro }}</div>
   {% endif %}
 
   <form method="post" action="/entrar">
@@ -49,13 +32,14 @@
     <label>Senha
       <input type="password" name="senha" autocomplete="current-password" required>
     </label>
-    <button class="principal" type="submit">Entrar</button>
+    <button type="submit">Entrar</button>
   </form>
 
   <p class="rodape">
     A sessão vale por 12 horas. Trocar a senha no painel do serviço encerra
     todas as sessões abertas.
   </p>
+
 </div>
 </body>
 </html>

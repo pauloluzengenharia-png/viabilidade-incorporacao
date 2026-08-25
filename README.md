@@ -52,6 +52,8 @@ As migrations rodam sozinhas no startup — não há passo manual de schema.
 | `/empreendimento/{id}/cenarios` | comparação dos cenários lado a lado |
 | `/empreendimento/{id}/fluxo` | fluxo de caixa mensal, exposição e aporte |
 | `/empreendimento/{id}/importar` | upload dos exports do Sienge, com histórico |
+| `/novo` | **cadastro guiado**: cria um estudo do zero, com a explicação de cada campo |
+| `/guia` | **como preencher cada dado**: o manual, campo a campo |
 | `/admin/carga` | **carga inicial**: sobe a planilha + os parâmetros e monta a primeira SPE |
 | `/api/docs` | a API, documentada |
 
@@ -112,6 +114,8 @@ app/
   importadores/
     sienge.py    normalização — hoje lê xlsx, amanhã lê a API, mesmas regras
     gravar.py    gravação idempotente
+  glossario.py   ← o que é cada dado: fonte única do guia E da ajuda nas telas
+  novo_estudo.py ← criação de um estudo do zero, com validação que lista tudo
   main.py        ← FastAPI: telas e API
 migrations/      ← .sql numerados, aplicados uma vez cada
 tests/           ← as conferências contra a planilha
@@ -210,10 +214,61 @@ Ainda é **uma credencial só para todo mundo**. Se virar multiusuário, o camin
 é uma tabela de usuários com hash por linha — a estrutura de sessão já suporta,
 porque o cookie já carrega o usuário.
 
+## Identidade visual
+
+A folha de estilo segue o guia de marca da MMI: preto, areia `#e0d0bf`, cinza
+`#a0a0a0` e off-white `#F4F4F4`, com o logotipo no cabeçalho, no login e no
+rodapé. A tipografia é Outfit (substituta livre da Gilroy do guia); os números
+usam Inter com figuras tabulares, porque coluna de dinheiro precisa alinhar e
+monoespaçada dava ao sistema cara de terminal.
+
+Uma decisão que vale registrar: a marca é neutra de propósito, e neutro não
+resolve gráfico — duas séries só se distinguem por matiz. Então a paleta é
+dividida. **Interface** (fundo, texto, botão, aba, tarja) usa só cor de marca.
+**Dado** (as duas séries do fluxo, o sinal do número, os marcadores) usa um par
+petróleo/terracota que passou no `validate_palette`: faixa de luminosidade, piso
+de croma, separação sob protanopia e deuteranopia e contraste contra a
+superfície, nos dois modos. O par aparece pouco e sempre pequeno.
+
+Todo texto tem contraste ≥ 4,5:1 contra o fundo em que assenta, claro e escuro.
+
+## Onde mora a explicação de cada campo
+
+`app/glossario.py` é a fonte única. A tela `/guia` monta o manual a partir dele,
+a tabela de viabilidade pendura nele o "o que é" de cada linha do DRE, e o
+formulário de cadastro puxa dele o texto do "?" ao lado de cada campo. Escrever
+a explicação em dois lugares seria garantir que um dos dois envelhece.
+
+Cada verbete responde sempre às mesmas quatro perguntas — o que é, de onde vem,
+como preencher e o que costuma dar errado — porque são as quatro que aparecem
+quando alguém senta para preencher.
+
+## Um estudo do zero
+
+`/novo` cobre o caso anterior à planilha e ao Sienge: o terreno em avaliação, o
+lançamento que ainda vai à diretoria. Duas simplificações deliberadas, porque a
+alternativa seria pedir na primeira tela um dado que nessa fase não existe:
+
+- **O estoque nasce homogêneo.** Informa-se quantas unidades e a área privativa
+  total; o sistema cria N unidades de área média ao preço de tabela. Isso basta
+  para VGV, fluxo e indicadores. Quando o cadastro real chegar do Sienge, a
+  importação substitui as unidades sintéticas.
+- **A curva de obra vem de um formato** — linear, S suave ou S acentuada — em
+  vez do cronograma físico-financeiro detalhado, que entra depois pelo orçamento.
+
+O que não é simplificado: as travas continuam valendo. A tabela de venda soma
+100% e a curva soma 100%, aqui como em qualquer outro caminho. A validação
+devolve a lista completa de problemas de uma vez, em vez de parar no primeiro —
+quem preenche 40 campos merece ver os quatro erros juntos.
+
 ## O que ainda não existe
 
 - **Usuários individuais.** Hoje é uma credencial só para todo mundo. Não há
   registro de quem mexeu em qual premissa.
+- **Edição das premissas pela tela.** `/novo` cria; depois disso, mudar uma
+  premissa ainda é `UPDATE` no banco seguido de Recalcular.
+- **Cronograma de obra detalhado pela tela.** A curva por formato resolve o
+  estudo inicial; a EAP de 21 itens continua entrando por migração ou importação.
 - **Financiamento à produção.** O motor tem o bloco (`_linhas_financiamento`,
   liberação por evolução de obra, juros e amortização) e ele está desligado
   porque a Kiev tem limite zero. Falta a tela para cadastrar o contrato.

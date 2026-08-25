@@ -21,6 +21,9 @@ from .importadores import gravar
 from .importadores.sienge import (ler_planilha, normalizar_contratos,
                                   normalizar_movimentos, normalizar_recebido,
                                   normalizar_receber, normalizar_unidades)
+from .glossario import SECOES, ajuda, ajuda_da_linha
+from .novo_estudo import FORMATOS_CURVA, Estudo
+from .novo_estudo import criar as criar_estudo
 from .repositorio import carregar_entradas
 from .seguranca import (COOKIE, DURACAO, conferir_senha, credenciais_configuradas,
                         criar_sessao, exigir_login)
@@ -63,6 +66,8 @@ def mes_curto(d):
 
 templates.env.filters.update(moeda=moeda, milhoes=milhoes,
                              percentual=percentual, mes=mes_curto)
+# a explicação de cada linha mora no glossário; o template só a pendura
+templates.env.globals.update(ajuda_da_linha=ajuda_da_linha, ajuda=ajuda)
 
 
 @app.on_event("startup")
@@ -103,6 +108,131 @@ def sair():
     resposta = RedirectResponse("/entrar", status_code=303)
     resposta.delete_cookie(COOKIE)
     return resposta
+
+
+# ================================================================ guia
+@app.get("/guia", response_class=HTMLResponse)
+def guia(request: Request):
+    """O manual de preenchimento. Não toca no banco — é texto e só."""
+    return templates.TemplateResponse(request, "guia.html", {"secoes": SECOES})
+
+
+# ================================================================ estudo novo
+INDICES = ["INCC-DI", "IGP-M", "IPCA"]
+
+
+def _num(v, padrao=0.0):
+    """Aceita vírgula decimal — é assim que se digita 0,045 num teclado daqui."""
+    if v is None or str(v).strip() == "":
+        return padrao
+    try:
+        return float(str(v).strip().replace(".", "").replace(",", ".")) \
+            if "," in str(v) else float(v)
+    except ValueError:
+        return padrao
+
+
+def _data(v):
+    if not v:
+        return None
+    try:
+        return dt.date.fromisoformat(v)
+    except ValueError:
+        return None
+
+
+def _tela_novo(request: Request, d: Estudo, erros=None, status=200):
+    return templates.TemplateResponse(
+        request, "novo.html",
+        {"d": d, "erros": erros or [], "formatos": FORMATOS_CURVA,
+         "indices": INDICES},
+        status_code=status)
+
+
+@app.get("/novo", response_class=HTMLResponse)
+def tela_novo(request: Request):
+    return _tela_novo(request, Estudo())
+
+
+@app.post("/novo", response_class=HTMLResponse)
+async def novo(request: Request, s: Session = Depends(sessao)):
+    """
+    Lê o formulário inteiro, valida tudo de uma vez e cria o estudo.
+
+    A validação devolve a lista completa de problemas em vez de parar no
+    primeiro: quem está preenchendo 40 campos merece ver os quatro erros juntos,
+    não descobrir um por recarregamento.
+    """
+    f = await request.form()
+    g = f.get
+
+    parcelas = []
+    for i in range(1, 7):
+        valor = _num(g(f"terreno_valor_{i}"))
+        if valor > 0:
+            parcelas.append((valor, _data(g(f"terreno_venc_{i}"))))
+
+    d = Estudo(
+        nome=(g("nome") or "").strip(),
+        sienge_enterprise_id=int(_num(g("sienge_enterprise_id"))) or None,
+        area_privativa=_num(g("area_privativa")),
+        area_construida=_num(g("area_construida")),
+        data_lancamento=_data(g("data_lancamento")),
+        data_entrega_prevista=_data(g("data_entrega_prevista")),
+        unidades=int(_num(g("unidades"))),
+        preco_m2=_num(g("preco_m2_estoque")),
+        comissao=_num(g("comissao")), ato=_num(g("ato")),
+        mensais=_num(g("mensais")), anuais=_num(g("anuais")),
+        semestrais=_num(g("semestrais")), unica=_num(g("unica")),
+        chaves=_num(g("chaves")), n_mensais=int(_num(g("n_mensais"), 60)),
+        inicio_vendas=_data(g("inicio_vendas")),
+        unidades_por_mes=_num(g("unidades_por_mes"), 4),
+        custo_raso=_num(g("custo_raso")),
+        inicio_obra=_data(g("inicio_obra")),
+        meses_obra=int(_num(g("meses_obra"), 36)),
+        formato_curva=g("formato_curva") or "s_suave",
+        taxa_adm_obra=_num(g("taxa_adm_obra")),
+        taxa_viabilizacao=_num(g("taxa_viabilizacao")),
+        outras_desp_adm_perc=_num(g("outras_desp_adm_perc")),
+        ret=_num(g("ret")), distratos=_num(g("distratos")),
+        despesas_comerciais=_num(g("despesas_comerciais")),
+        decoracao=_num(g("decoracao")),
+        projetos_e_outros=_num(g("projetos_e_outros")),
+        marketing_stand=_num(g("marketing_stand")),
+        marketing_propaganda=_num(g("marketing_propaganda")),
+        outras_entradas=_num(g("outras_entradas")),
+        terreno_parcelas=parcelas,
+        terreno_registro_perc=_num(g("terreno_registro_perc")),
+        indice_ate_chaves=g("indice_ate_chaves") or "",
+        indice_apos_chaves=g("indice_apos_chaves") or "",
+        indice_projetado_aa=_num(g("indice_projetado_aa")),
+        corrigir_custo_obra=g("corrigir_custo_obra") != "0",
+        tma_anual=_num(g("tma_anual"), 0.18),
+        meses_pos_chaves=int(_num(g("meses_pos_chaves"), 6)),
+    )
+
+    erros = d.erros()
+    if erros:
+        return _tela_novo(request, d, erros, status=422)
+
+    try:
+        emp = criar_estudo(s, d)
+    except Exception as e:                        # noqa: BLE001 — a tela mostra
+        s.rollback()
+        return _tela_novo(request, d, [f"O banco recusou o cadastro: {e}"], 422)
+
+    # primeira rodada: o estudo já nasce calculado
+    try:
+        cen = q(s, """SELECT id FROM cenario
+                       WHERE empreendimento_id = :e AND principal""", e=emp)[0]["id"]
+        rodar_e_persistir(s, cen, executada_por="cadastro pela tela")
+    except Exception as e:                        # noqa: BLE001
+        return _tela_novo(
+            request, d,
+            [f"O cadastro foi criado, mas o primeiro cálculo falhou: {e}. "
+             f"Abra o empreendimento e clique em Recalcular."], 422)
+
+    return RedirectResponse(f"/empreendimento/{emp}", status_code=303)
 
 
 # ================================================================ carga inicial

@@ -2,63 +2,89 @@
 {% block titulo %}Viabilidade — {{ emp.nome }}{% endblock %}
 {% block conteudo %}
 
+<div class="regua"></div>
 <h1>Viabilidade</h1>
 <p class="sub">
-  Orçado no lançamento × atualizado hoje × realizado em caixa.
-  O realizado considera os movimentos até <strong>{{ corte|mes }}</strong>;
-  a projeção começa no mês seguinte.
+  A mesma conta em quatro momentos: como foi <strong>aprovada no lançamento</strong>,
+  como está <strong>hoje</strong>, quanto já <strong>passou pelo caixa</strong> até
+  {{ corte|mes }} e quanto <strong>ainda falta acontecer</strong>. Tudo que vem
+  depois de {{ corte|mes }} é projeção, não histórico.
 </p>
 
 {% if ind %}
 <dl class="painel">
-  <div class="cel"><dt>VGV</dt><dd>{{ ind.vgv|milhoes }}<small>R$ M</small></dd></div>
-  <div class="cel"><dt>Receita líquida</dt><dd>{{ ind.receita_liquida|milhoes }}<small>R$ M</small></dd></div>
-  <div class="cel"><dt>Lucro</dt><dd>{{ ind.lucro|milhoes }}<small>R$ M</small></dd></div>
-  <div class="cel"><dt>Margem</dt><dd>{{ ind.margem|percentual }}</dd></div>
+  <div class="cel"><dt>VGV</dt><dd>{{ ind.vgv|milhoes }}<small>R$ M</small></dd>
+    <span class="nota">preço de tabela de todas as unidades, comissão inclusa</span></div>
+  <div class="cel"><dt>Receita líquida</dt><dd>{{ ind.receita_liquida|milhoes }}<small>R$ M</small></dd>
+    <span class="nota">depois de comissão, imposto e despesa comercial</span></div>
+  <div class="cel"><dt>Lucro</dt><dd>{{ ind.lucro|milhoes }}<small>R$ M</small></dd>
+    <span class="nota">do lançamento à última parcela</span></div>
+  <div class="cel"><dt>Margem</dt><dd>{{ ind.margem|percentual }}</dd>
+    <span class="nota">sobre a receita líquida, não sobre o VGV</span></div>
   <div class="cel neg"><dt>Exposição máxima</dt>
-    <dd>{{ ind.exposicao_maxima|milhoes }}<small>R$ M · {{ ind.mes_exposicao|mes }}</small></dd></div>
-  <div class="cel"><dt>Custo raso / m²</dt><dd>{{ ind.custo_m2_privativa|moeda(0) }}<small>R$/m²</small></dd></div>
+    <dd>{{ ind.exposicao_maxima|milhoes }}<small>R$ M</small></dd>
+    <span class="nota">pior saldo de caixa, em {{ ind.mes_exposicao|mes }}</span></div>
+  <div class="cel"><dt>Custo raso / m²</dt><dd>{{ ind.custo_m2_privativa|moeda(0) }}<small>R$/m²</small></dd>
+    <span class="nota">sobre a área privativa</span></div>
 </dl>
 {% endif %}
 
 {% if pendentes.n %}
 <div class="aviso">
-  <span><b>{{ pendentes.n }} lançamento(s) sem classificação</b>, somando
-  R$ {{ pendentes.v|moeda(2) }}. Eles entraram no banco mas caem em “A CLASSIFICAR”
-  e não aparecem em nenhuma linha do resultado até receberem uma conta.</span>
+  <span><b>{{ pendentes.n }} lançamento(s) ainda sem conta</b>, somando
+  R$ {{ pendentes.v|moeda(2) }}. Eles estão no banco, mas caem em “A CLASSIFICAR”
+  e não aparecem em nenhuma linha abaixo — ou seja, o realizado que você está
+  vendo é menor do que o verdadeiro por esse valor.</span>
 </div>
 {% endif %}
 
-<form class="acoes" method="get">
-  <label class="campo">Realizado até
-    <input type="date" name="ate" value="{{ corte }}">
-  </label>
-  <button type="submit">Aplicar corte</button>
+<div class="acoes">
+  <form method="get" style="display:flex; gap:.7rem; align-items:flex-end">
+    <label class="campo">Considerar realizado até
+      <input type="date" name="ate" value="{{ corte }}">
+    </label>
+    <button type="submit">Aplicar</button>
+  </form>
   <span style="flex:1"></span>
-</form>
-<form class="acoes" method="post" action="/empreendimento/{{ emp.id }}/recalcular">
-  <button class="principal" type="submit">Recalcular todos os cenários</button>
-  <span class="rotulo">{% if ind %}última rodada em
-    {{ ind.executada_em.strftime('%d/%m/%Y %H:%M') }} · cenário {{ ind.cenario }}{% endif %}</span>
-</form>
+  <form method="post" action="/empreendimento/{{ emp.id }}/recalcular">
+    <button class="principal" type="submit">Recalcular com as premissas de hoje</button>
+  </form>
+</div>
+{% if ind %}
+<p class="rotulo" style="margin:-.8rem 0 1.6rem">última rodada em
+  {{ ind.executada_em.strftime('%d/%m/%Y às %H:%M') }} · cenário {{ ind.cenario }}</p>
+{% endif %}
 
 <div class="rolagem">
 <table>
   <thead>
     <tr>
-      <th>Conta</th>
-      <th class="n">Orçado</th>
-      <th class="n">Atualizado</th>
+      <th style="min-width:270px">Conta</th>
+      <th class="n">Orçado<br><span class="rotulo" style="font-weight:400">no lançamento</span></th>
+      <th class="n">Atualizado<br><span class="rotulo" style="font-weight:400">premissas de hoje</span></th>
       <th class="n">% da receita</th>
       <th class="n">Variação</th>
-      <th class="n">Realizado</th>
+      <th class="n">Realizado<br><span class="rotulo" style="font-weight:400">até {{ corte|mes }}</span></th>
       <th class="n">A realizar</th>
     </tr>
   </thead>
   <tbody>
   {% for l in linhas %}
+    {% set v = ajuda_da_linha(l.linha) %}
     <tr class="{{ 'total' if l.destaque }}">
-      <td>{{ l.linha }}</td>
+      <td>
+        {% if v %}
+        <details class="ajuda">
+          <summary title="O que é {{ l.linha }}">{{ l.linha }}</summary>
+          <div class="texto">
+            {{ v.o_que }}
+            {%- if v.de_onde %} <b>De onde vem:</b> {{ v.de_onde }}{% endif %}
+            {%- if v.como and not v.como.startswith('Não se digita') %} <b>Como preencher:</b> {{ v.como }}{% endif %}
+            {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado }}{% endif %}
+          </div>
+        </details>
+        {% else %}{{ l.linha }}{% endif %}
+      </td>
       <td class="n {{ 'neg' if l.orcado < 0 }}">{{ l.orcado|moeda(0) }}</td>
       <td class="n {{ 'neg' if l.atualizado < 0 }}">{{ l.atualizado|moeda(0) }}</td>
       <td class="n fraco">{{ l.perc_vv|percentual }}</td>
@@ -73,10 +99,10 @@
 </table>
 </div>
 <p class="legenda-tab">
-  Valores em reais. <strong>Orçado</strong> é o cenário congelado no lançamento e não
-  muda; <strong>atualizado</strong> é a última rodada do cenário principal;
-  <strong>realizado</strong> vem dos movimentos do Sienge classificados em cada conta.
-  Variação = atualizado ÷ orçado − 1.
+  Valores em reais. <strong>Variação</strong> é atualizado ÷ orçado − 1: numa linha
+  de despesa, positivo é má notícia; numa linha de receita, é boa. Clique no nome
+  de qualquer conta para ver o que ela é e de onde o número vem — ou abra o
+  <a href="/guia">guia completo de preenchimento</a>.
 </p>
 
 {% endblock %}

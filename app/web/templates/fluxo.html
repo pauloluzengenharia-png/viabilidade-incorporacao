@@ -2,10 +2,13 @@
 {% block titulo %}Fluxo de caixa — {{ emp.nome }}{% endblock %}
 {% block conteudo %}
 
+<div class="regua"></div>
 <h1>Fluxo de caixa</h1>
 <p class="sub">
-  Entradas da carteira vendida e do estoque projetado contra o desembolso da obra,
-  taxas e despesas — mês a mês, no cenário escolhido.
+  Quanto dinheiro entra e sai em cada mês: de um lado a carteira já vendida mais
+  o estoque que o cenário assume vender, do outro a obra, as taxas e as despesas.
+  O saldo acumulado é o que responde à pergunta que o resultado não responde —
+  <strong>quanto precisa estar no caixa, e quando</strong>.
 </p>
 
 <form class="acoes" method="get">
@@ -23,12 +26,12 @@
 
 {% if not premissas.corrige_carteira %}
 <div class="aviso">
-  <span><b>Projeção em valores nominais.</b> Este cenário não corrige a carteira
-  nem o custo da obra por índice — é o que a planilha fazia. Numa carteira que
-  se estende por anos isso subestima a receita <em>e</em> a necessidade de aporte,
-  porque o custo infla durante a obra e a correção da parcela só entra depois.
-  Para ligar, defina o índice do cenário: INCC-DI até as chaves, IGP-M ou IPCA
-  no repasse.</span>
+  <span><b>Este cenário projeta em valores nominais</b>, como se o INCC fosse
+  zero até o fim da obra. É o que a planilha fazia, e por isso os números batem
+  com o histórico. Numa carteira de anos isso subestima a receita <em>e</em> a
+  necessidade de aporte, porque o custo infla durante a obra e a correção da
+  parcela só chega depois. Para ligar, defina o índice do cenário: INCC-DI até as
+  chaves, IGP-M ou IPCA no repasse. <a href="/guia#correcao">O que muda</a>.</span>
 </div>
 {% endif %}
 

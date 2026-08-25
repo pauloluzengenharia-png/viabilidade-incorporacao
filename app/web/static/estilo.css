@@ -1,189 +1,475 @@
 /* =====================================================================
-   Sistema de viabilidade — folha de estilo única.
-   Paleta: papel/grafite com dois acentos semânticos (premissa × realizado).
-   Os tokens são definidos três vezes: claro, escuro por preferência do SO,
-   e escuro por escolha explícita — nenhuma cor vive só dentro de um bloco.
+   MMI Incorporações — folha de estilo do sistema de viabilidade.
+
+   A marca é neutra de propósito: preto, areia (#e0d0bf), cinza (#a0a0a0) e
+   off-white (#F4F4F4). Isso resolve a interface, mas não resolve gráfico: duas
+   séries só se distinguem por matiz, e a marca não tem matiz nenhum. Então a
+   divisão é esta, e ela é deliberada:
+
+     · INTERFACE (fundo, texto, botão, aba, tarja)  → só cores da marca
+     · DADO (as duas séries do fluxo, o sinal do número, os marcadores)
+       → um par petróleo/terracota validado para daltonismo e contraste
+
+   O par de dado aparece pouco e sempre pequeno; quem olha a tela de longe vê
+   preto, areia e papel. Os valores do par passaram no validate_palette:
+   faixa de luminosidade, piso de croma, separação sob protanopia/deuteranopia
+   e contraste contra a superfície, nos dois modos.
+
+   Os tokens são definidos três vezes — claro, escuro por preferência do
+   sistema e escuro por escolha explícita. Nenhuma cor vive só dentro de um
+   bloco de media query.
    ===================================================================== */
+
 :root{
-  --papel:#F6F5F1; --papel-2:#EFEEE8; --papel-3:#E6E4DC;
-  --tinta:#191C1A; --tinta-2:#4A514D; --tinta-3:#7B837E;
-  --fio:#D6D5CD; --fio-forte:#B8B7AE;
-  --premissa:#0B5F58; --premissa-fraco:#0B5F5814;
-  --realizado:#9C3B18; --realizado-fraco:#9C3B1814;
-  --ok:#2F6B3D; --alerta:#8A6100; --alerta-fraco:#8A610014;
-  /* série de gráfico — validada pelo validate_palette.js */
-  --entrada:#0d9080; --saida:#c04a1e;
-  --grade:#00000010;
+  /* --- marca --- */
+  --preto:#000000;
+  --areia:#E0D0BF;
+  --cinza:#A0A0A0;
+  --offwhite:#F4F4F4;
+
+  /* --- superfícies e tinta (claro) --- */
+  --fundo:#F4F4F4;
+  --superficie:#FFFFFF;
+  --superficie-2:#ECE8E1;
+  --tinta:#0A0A0A;
+  --tinta-2:#55504A;
+  --tinta-3:#726C64;
+  --fio:#DFDAD2;
+  --fio-forte:#C6C0B6;
+
+  /* --- acento de interface: a própria marca --- */
+  --acento:#000000;             /* botão principal, aba ativa, régua */
+  --acento-tinta:#E0D0BF;       /* o que se escreve em cima do acento */
+  --areia-funda:#8A6A45;        /* areia legível como texto sobre papel */
+  --areia-fraca:#E0D0BF66;      /* tarja, marcador, faixa de destaque */
+
+  /* --- codificação de dado (validada) --- */
+  --premissa:#00688F;           /* o que o motor projeta */
+  --premissa-fraco:#00688F14;
+  --realizado:#B4552E;          /* o que já passou pelo caixa */
+  --realizado-fraco:#B4552E14;
+  --entrada:#00688F;            /* série de entradas do gráfico */
+  --saida:#B4552E;              /* série de saídas do gráfico */
+  --negativo:#B4552E;           /* número abaixo de zero */
+  --ok:#3F6B4A;
+  --alerta:#8A6118;
+  --alerta-fraco:#8A611814;
+  --grade:#0000000F;
+
+  /* --- forma --- */
+  --raio:10px;
+  --raio-p:6px;
+  --largura:1240px;
 }
+
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --papel:#121513; --papel-2:#181C19; --papel-3:#1F2421;
-    --tinta:#E9EAE5; --tinta-2:#A0A8A3; --tinta-3:#79817C;
-    --fio:#2A2F2C; --fio-forte:#3D443F;
-    --premissa:#5AC6B9; --premissa-fraco:#5AC6B91F;
-    --realizado:#EC855A; --realizado-fraco:#EC855A1F;
-    --ok:#6FBF83; --alerta:#D9A441; --alerta-fraco:#D9A4411F;
-    --entrada:#35a897; --saida:#d96a42;
+    --fundo:#0A0A0A;
+    --superficie:#121212;
+    --superficie-2:#1C1A18;
+    --tinta:#F4F4F4;
+    --tinta-2:#A0A0A0;
+    --tinta-3:#918C85;
+    --fio:#262421;
+    --fio-forte:#3A3733;
+    --acento:#E0D0BF;
+    --acento-tinta:#0A0A0A;
+    --areia-funda:#E0D0BF;
+    --areia-fraca:#E0D0BF1F;
+    --premissa:#2E93BE;
+    --premissa-fraco:#2E93BE1F;
+    --realizado:#D4764A;
+    --realizado-fraco:#D4764A1F;
+    --entrada:#2E93BE;
+    --saida:#D4764A;
+    --negativo:#D4764A;
+    --ok:#7FB08C;
+    --alerta:#D2A44E;
+    --alerta-fraco:#D2A44E1F;
     --grade:#FFFFFF12;
   }
 }
 :root[data-theme="dark"]{
-  --papel:#121513; --papel-2:#181C19; --papel-3:#1F2421;
-  --tinta:#E9EAE5; --tinta-2:#A0A8A3; --tinta-3:#79817C;
-  --fio:#2A2F2C; --fio-forte:#3D443F;
-  --premissa:#5AC6B9; --premissa-fraco:#5AC6B91F;
-  --realizado:#EC855A; --realizado-fraco:#EC855A1F;
-  --ok:#6FBF83; --alerta:#D9A441; --alerta-fraco:#D9A4411F;
-  --entrada:#35a897; --saida:#d96a42;
+  --fundo:#0A0A0A;
+  --superficie:#121212;
+  --superficie-2:#1C1A18;
+  --tinta:#F4F4F4;
+  --tinta-2:#A0A0A0;
+  --tinta-3:#918C85;
+  --fio:#262421;
+  --fio-forte:#3A3733;
+  --acento:#E0D0BF;
+  --acento-tinta:#0A0A0A;
+  --areia-funda:#E0D0BF;
+  --areia-fraca:#E0D0BF1F;
+  --premissa:#2E93BE;
+  --premissa-fraco:#2E93BE1F;
+  --realizado:#D4764A;
+  --realizado-fraco:#D4764A1F;
+  --entrada:#2E93BE;
+  --saida:#D4764A;
+  --negativo:#D4764A;
+  --ok:#7FB08C;
+  --alerta:#D2A44E;
+  --alerta-fraco:#D2A44E1F;
   --grade:#FFFFFF12;
 }
 
+/* =====================================================================
+   base
+   ===================================================================== */
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{
-  margin:0; background:var(--papel); color:var(--tinta);
-  font-family:"Archivo",-apple-system,"Segoe UI",Roboto,sans-serif;
-  font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;
+  margin:0; background:var(--fundo); color:var(--tinta);
+  font-family:"Outfit","Gilroy",-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-size:15.5px; line-height:1.6; -webkit-font-smoothing:antialiased;
 }
-a{color:var(--premissa)}
-:focus-visible{outline:2px solid var(--premissa); outline-offset:2px}
+a{color:inherit; text-underline-offset:.18em; text-decoration-color:var(--fio-forte)}
+a:hover{text-decoration-color:currentColor}
+:focus-visible{outline:2px solid var(--areia-funda); outline-offset:2px; border-radius:3px}
+img,svg{max-width:100%}
 
-.mono,code,td.n,.num{font-family:"IBM Plex Mono",ui-monospace,monospace;
-  font-variant-numeric:tabular-nums}
+/* Números em Inter com figuras tabulares: as colunas alinham sem precisar de
+   monoespaçada, que é o que dava ao sistema cara de terminal. */
+.mono,td.n,th.n,.num,.painel dd,.linhas span:last-child{
+  font-family:"Inter",-apple-system,"Segoe UI",sans-serif;
+  font-variant-numeric:tabular-nums lining-nums;
+  font-feature-settings:"tnum" 1,"lnum" 1;
+}
+code{font-family:"Inter",ui-monospace,monospace; font-size:.92em;
+  background:var(--superficie-2); border:1px solid var(--fio);
+  border-radius:4px; padding:.08em .38em}
 
-/* ---------------- cabeçalho ---------------- */
-header.topo{border-bottom:1px solid var(--fio); background:var(--papel-2)}
-.faixa{max-width:1280px; margin:0 auto; padding:.9rem 1.5rem;
-  display:flex; align-items:baseline; gap:1.2rem; flex-wrap:wrap}
-.marca{font-weight:700; letter-spacing:-.02em; font-size:1.02rem; text-decoration:none;
-  color:var(--tinta)}
-.marca span{color:var(--tinta-3); font-weight:500}
-nav.abas{max-width:1280px; margin:0 auto; padding:0 1.5rem; display:flex; gap:.2rem;
-  overflow-x:auto}
-nav.abas a{padding:.55rem .9rem; font-size:.86rem; font-weight:500; text-decoration:none;
-  color:var(--tinta-2); border-bottom:2px solid transparent; white-space:nowrap}
-nav.abas a:hover{color:var(--tinta)}
-nav.abas a.ativa{color:var(--tinta); border-bottom-color:var(--premissa)}
+/* =====================================================================
+   cabeçalho
+   ===================================================================== */
+header.topo{background:var(--preto); color:var(--offwhite)}
+.faixa{max-width:var(--largura); margin:0 auto; padding:1.1rem 1.6rem;
+  display:flex; align-items:center; gap:1.4rem; flex-wrap:wrap}
+.marca{display:flex; align-items:center; gap:.85rem; text-decoration:none;
+  color:var(--areia)}
+.marca svg{height:19px; width:auto; display:block; color:var(--areia)}
+.marca .divisa{width:1px; height:20px; background:#3A3733}
+.marca span{font-size:.82rem; font-weight:400; color:var(--cinza);
+  letter-spacing:.01em; white-space:nowrap}
+.topo .rotulo{color:var(--cinza)}
+.topo .obra{font-size:.86rem; color:var(--areia); font-weight:500}
+.sair{font-size:.78rem; letter-spacing:.1em; text-transform:uppercase;
+  color:var(--cinza); text-decoration:none; font-weight:500}
+.sair:hover{color:var(--areia)}
 
-main{max-width:1280px; margin:0 auto; padding:1.8rem 1.5rem 5rem}
-h1{font-size:1.5rem; font-weight:700; letter-spacing:-.022em; margin:0 0 .2rem;
-  text-wrap:balance}
-h2{font-size:1.05rem; font-weight:600; letter-spacing:-.012em; margin:2.4rem 0 .8rem}
+nav.abas{background:var(--preto); border-bottom:1px solid #1E1C1A}
+nav.abas .interno{max-width:var(--largura); margin:0 auto; padding:0 1.6rem;
+  display:flex; gap:.3rem; overflow-x:auto}
+nav.abas a{padding:.62rem 1rem 1rem; font-size:.9rem; font-weight:400;
+  text-decoration:none; color:var(--cinza); white-space:nowrap;
+  border-bottom:2px solid transparent; margin-bottom:-1px}
+nav.abas a:hover{color:var(--offwhite)}
+nav.abas a.ativa{color:var(--areia); border-bottom-color:var(--areia); font-weight:500}
+
+/* =====================================================================
+   página
+   ===================================================================== */
+main{max-width:var(--largura); margin:0 auto; padding:2.6rem 1.6rem 6rem}
+h1{font-size:2rem; font-weight:600; letter-spacing:-.026em; margin:0 0 .35rem;
+  text-wrap:balance; line-height:1.18}
+h2{font-size:1.2rem; font-weight:600; letter-spacing:-.016em; margin:3rem 0 .9rem}
 h2:first-child{margin-top:0}
-.sub{color:var(--tinta-2); font-size:.9rem; margin:0 0 1.6rem}
-.rotulo{font-size:.66rem; font-weight:600; letter-spacing:.13em; text-transform:uppercase;
-  color:var(--tinta-3)}
+h3{font-size:1rem; font-weight:600; letter-spacing:-.01em; margin:0 0 .3rem}
+p{margin:0 0 1rem}
+.sub{color:var(--tinta-2); font-size:1rem; margin:0 0 2rem; max-width:74ch;
+  line-height:1.62}
+.rotulo{font-size:.68rem; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--tinta-3)}
+.fraco{color:var(--tinta-3)}
+.legenda-tab{font-size:.87rem; color:var(--tinta-2); margin:.9rem 0 0;
+  max-width:80ch; line-height:1.6}
 
-/* ---------------- painel de indicadores ---------------- */
-.painel{display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr));
-  gap:1px; background:var(--fio); border:1px solid var(--fio); border-radius:5px;
-  overflow:hidden; margin-bottom:1.8rem}
-.painel .cel{background:var(--papel-2); padding:.85rem 1rem .95rem}
-.painel dt{font-size:.64rem; font-weight:600; letter-spacing:.11em; text-transform:uppercase;
-  color:var(--tinta-3); margin-bottom:.3rem}
-.painel dd{margin:0; font-family:"IBM Plex Mono",monospace; font-size:1.18rem;
-  font-weight:500; font-variant-numeric:tabular-nums; letter-spacing:-.02em}
-.painel dd small{font-size:.72rem; color:var(--tinta-3); font-weight:400;
-  font-family:"Archivo",sans-serif; margin-left:.25rem}
-.painel .neg dd{color:var(--realizado)}
+/* linha de abertura da seção: uma régua fina areia, não um traço de sistema */
+.regua{height:3px; width:46px; background:var(--areia); border-radius:2px;
+  margin:0 0 1.5rem}
 
-/* ---------------- tabelas ---------------- */
-.rolagem{overflow-x:auto; border:1px solid var(--fio); border-radius:5px;
-  background:var(--papel-2)}
-table{border-collapse:collapse; width:100%; font-size:.86rem}
-th,td{padding:.5rem .85rem; border-bottom:1px solid var(--fio); text-align:left}
-thead th{position:sticky; top:0; background:var(--papel-3); font-size:.64rem;
-  font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--tinta-2);
-  white-space:nowrap; z-index:1}
+/* =====================================================================
+   painel de indicadores
+   ===================================================================== */
+.painel{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+  gap:1px; background:var(--fio); border:1px solid var(--fio);
+  border-radius:var(--raio); overflow:hidden; margin-bottom:2rem}
+.painel .cel{background:var(--superficie); padding:1.05rem 1.15rem 1.15rem}
+.painel dt{font-size:.66rem; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--tinta-3); margin-bottom:.45rem}
+.painel dd{margin:0; font-size:1.5rem; font-weight:500; letter-spacing:-.03em;
+  line-height:1.1}
+.painel dd small{font-size:.7rem; color:var(--tinta-3); font-weight:400;
+  font-family:"Outfit",sans-serif; margin-left:.3rem; letter-spacing:0}
+.painel .neg dd{color:var(--negativo)}
+.painel .cel .nota{display:block; margin-top:.4rem; font-size:.74rem;
+  color:var(--tinta-3); line-height:1.4}
+
+/* =====================================================================
+   tabelas
+   ===================================================================== */
+.rolagem{overflow-x:auto; border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie)}
+table{border-collapse:collapse; width:100%; font-size:.9rem}
+th,td{padding:.62rem .95rem; border-bottom:1px solid var(--fio); text-align:left}
+thead th{position:sticky; top:0; background:var(--superficie-2); font-size:.66rem;
+  font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--tinta-2); white-space:nowrap; z-index:1}
 tbody tr:last-child td{border-bottom:0}
-tbody tr:hover td{background:var(--papel-3)}
-td.n,th.n{text-align:right; white-space:nowrap;
-  font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
-tr.total td{font-weight:600; background:var(--papel-3)}
-tr.total:hover td{background:var(--papel-3)}
-td.neg{color:var(--realizado)}
+tbody tr:hover td{background:var(--superficie-2)}
+td.n,th.n{text-align:right; white-space:nowrap}
+tr.total td{font-weight:600; background:var(--areia-fraca)}
+tr.total:hover td{background:var(--areia-fraca)}
+td.neg{color:var(--negativo)}
 td.fraco{color:var(--tinta-3)}
-.legenda-tab{font-size:.78rem; color:var(--tinta-3); margin:.6rem 0 0}
+tr.destaque td{background:var(--areia-fraca)}
 
-/* ---------------- marcadores ---------------- */
-.marca-p,.marca-r,.marca-c,.marca-a{display:inline-block; font-size:.62rem; font-weight:600;
-  letter-spacing:.08em; text-transform:uppercase; padding:.14rem .44rem; border-radius:3px;
-  border:1px solid; white-space:nowrap}
+/* =====================================================================
+   marcadores
+   ===================================================================== */
+.marca-p,.marca-r,.marca-c,.marca-a{display:inline-block; font-size:.63rem;
+  font-weight:600; letter-spacing:.1em; text-transform:uppercase;
+  padding:.16rem .48rem; border-radius:999px; border:1px solid; white-space:nowrap}
 .marca-p{color:var(--premissa); border-color:var(--premissa); background:var(--premissa-fraco)}
 .marca-r{color:var(--realizado); border-color:var(--realizado); background:var(--realizado-fraco)}
-.marca-c{color:var(--tinta-2); border-color:var(--fio-forte); background:var(--papel-3)}
+.marca-c{color:var(--tinta-2); border-color:var(--fio-forte); background:var(--superficie-2)}
 .marca-a{color:var(--alerta); border-color:var(--alerta); background:var(--alerta-fraco)}
 
-/* ---------------- avisos ---------------- */
-.aviso{display:flex; gap:.75rem; align-items:flex-start; padding:.8rem 1rem;
-  border-radius:5px; font-size:.86rem; margin-bottom:1.2rem; line-height:1.45;
-  border:1px solid; background:var(--alerta-fraco); border-color:var(--alerta);
+/* =====================================================================
+   avisos
+   ===================================================================== */
+.aviso{display:flex; gap:.9rem; align-items:flex-start; padding:1rem 1.15rem;
+  border-radius:var(--raio); font-size:.9rem; margin-bottom:1.4rem;
+  line-height:1.55; border:1px solid var(--alerta); background:var(--alerta-fraco);
   color:var(--tinta)}
 .aviso b{color:var(--alerta)}
+.aviso.calmo{border-color:var(--fio); background:var(--superficie)}
+.aviso.calmo b{color:var(--tinta)}
 
-/* ---------------- botões e formulários ---------------- */
-.acoes{display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; margin-bottom:1.4rem}
-button,.botao{font-family:inherit; font-size:.84rem; font-weight:500; padding:.45rem .9rem;
-  border-radius:5px; border:1px solid var(--fio-forte); background:var(--papel-2);
-  color:var(--tinta); cursor:pointer; text-decoration:none; display:inline-block}
-button:hover,.botao:hover{background:var(--papel-3)}
-button.principal{background:var(--premissa); border-color:var(--premissa); color:var(--papel)}
-button.principal:hover{filter:brightness(1.1)}
-select,input[type=date],input[type=file]{font-family:inherit; font-size:.84rem;
-  padding:.4rem .6rem; border:1px solid var(--fio-forte); border-radius:5px;
-  background:var(--papel-2); color:var(--tinta)}
-label.campo{display:flex; flex-direction:column; gap:.3rem; font-size:.78rem;
+/* =====================================================================
+   botões e formulários
+   ===================================================================== */
+.acoes{display:flex; gap:.7rem; flex-wrap:wrap; align-items:center;
+  margin-bottom:1.6rem}
+button,.botao{font-family:inherit; font-size:.88rem; font-weight:500;
+  padding:.55rem 1.1rem; border-radius:var(--raio-p);
+  border:1px solid var(--fio-forte); background:var(--superficie);
+  color:var(--tinta); cursor:pointer; text-decoration:none; display:inline-block;
+  line-height:1.4; transition:background .12s, border-color .12s}
+button:hover,.botao:hover{background:var(--superficie-2); border-color:var(--tinta-3)}
+button.principal,.botao.principal{background:var(--acento); border-color:var(--acento);
+  color:var(--acento-tinta); font-weight:600}
+button.principal:hover,.botao.principal:hover{filter:brightness(1.25);
+  border-color:var(--acento)}
+button:disabled{opacity:.45; cursor:not-allowed}
+
+input,select,textarea{font-family:inherit; font-size:.92rem;
+  padding:.5rem .7rem; border:1px solid var(--fio-forte);
+  border-radius:var(--raio-p); background:var(--superficie); color:var(--tinta);
+  width:100%}
+input[type=file]{padding:.38rem .5rem}
+input[type=checkbox]{width:auto}
+input:focus,select:focus,textarea:focus{border-color:var(--areia-funda);
+  outline:2px solid var(--areia-fraca); outline-offset:0}
+label.campo{display:flex; flex-direction:column; gap:.34rem; font-size:.8rem;
   color:var(--tinta-2); font-weight:500}
+label.campo .rot{display:block; padding-right:1.4rem; line-height:1.35}
+label.campo .rot .fraco{font-weight:400}
+.linha-campos{align-items:start}
+.numerico input{text-align:right;
+  font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums}
 
-/* ---------------- cartões ---------------- */
-.cartoes{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
-  gap:1rem}
-.cartao{border:1px solid var(--fio); border-radius:6px; background:var(--papel-2);
-  padding:1.1rem 1.2rem 1.2rem; text-decoration:none; color:inherit; display:block}
-.cartao:hover{border-color:var(--fio-forte)}
-.cartao h3{margin:0 0 .15rem; font-size:1rem; font-weight:600; letter-spacing:-.012em}
-.cartao .meta{font-size:.78rem; color:var(--tinta-3); margin-bottom:.9rem}
-.cartao .linhas{display:grid; grid-template-columns:1fr auto; gap:.28rem .8rem;
-  font-size:.84rem}
-.cartao .linhas span:nth-child(odd){color:var(--tinta-2)}
-.cartao .linhas span:nth-child(even){font-family:"IBM Plex Mono",monospace;
-  font-variant-numeric:tabular-nums}
+/* =====================================================================
+   cartões
+   ===================================================================== */
+.cartoes{display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr));
+  gap:1.1rem}
+.cartao{border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie); padding:1.3rem 1.4rem 1.4rem;
+  text-decoration:none; color:inherit; display:block;
+  transition:border-color .12s, transform .12s}
+a.cartao:hover{border-color:var(--tinta-3); transform:translateY(-1px)}
+.cartao h3{margin:0 0 .2rem; font-size:1.08rem}
+.cartao .meta{font-size:.8rem; color:var(--tinta-3); margin-bottom:1.1rem}
+.cartao .linhas{display:grid; grid-template-columns:1fr auto; gap:.42rem .8rem;
+  font-size:.88rem}
+.cartao .linhas span:first-child{color:var(--tinta-2)}
+.cartao .linhas span:last-child{font-weight:500}
 
-/* ---------------- gráficos ---------------- */
-figure{margin:0 0 1.6rem; border:1px solid var(--fio); border-radius:5px;
-  background:var(--papel-2); overflow:hidden}
+/* =====================================================================
+   gráficos
+   ===================================================================== */
+figure{margin:0 0 1.8rem; border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie); overflow:hidden}
 figure .cabeca{display:flex; justify-content:space-between; align-items:baseline;
-  gap:1rem; padding:.85rem 1.1rem .2rem; flex-wrap:wrap}
-figure h3{margin:0; font-size:.92rem; font-weight:600}
-figure .tela{overflow-x:auto; padding:.2rem .4rem .4rem}
+  gap:1rem; padding:1.1rem 1.3rem .3rem; flex-wrap:wrap}
+figure h3{margin:0; font-size:1rem; font-weight:600}
+figure .tela{overflow-x:auto; padding:.3rem .6rem .6rem}
 figure svg{display:block; min-width:720px; width:100%; height:auto}
-figcaption{font-size:.8rem; color:var(--tinta-3); padding:.2rem 1.1rem 1rem;
-  line-height:1.45}
-.chaves{display:flex; gap:1rem; font-size:.76rem; color:var(--tinta-2); flex-wrap:wrap}
-.chaves i{display:inline-block; width:11px; height:11px; border-radius:2px;
-  margin-right:.35rem; vertical-align:-1px}
-.eixo{fill:var(--tinta-3); font-size:10px; font-family:"IBM Plex Mono",monospace}
+figcaption{font-size:.85rem; color:var(--tinta-2); padding:.3rem 1.3rem 1.2rem;
+  line-height:1.6; max-width:88ch}
+.chaves,.legenda{display:flex; gap:1.2rem; font-size:.8rem; color:var(--tinta-2);
+  flex-wrap:wrap}
+.chaves i,.legenda i{display:inline-block; width:11px; height:11px;
+  border-radius:3px; margin-right:.4rem; vertical-align:-1px}
+.eixo{fill:var(--tinta-3); font-size:10px;
+  font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums}
 .grade{stroke:var(--grade); stroke-width:1}
 .zero{stroke:var(--fio-forte); stroke-width:1}
 .alvo{fill:transparent; cursor:crosshair}
 
 #dica{position:fixed; pointer-events:none; opacity:0; transition:opacity .1s;
-  background:var(--papel); border:1px solid var(--fio-forte); border-radius:5px;
-  padding:.5rem .7rem; font-size:.78rem; box-shadow:0 4px 14px #0000001f; z-index:50;
-  min-width:170px}
-#dica .m{font-weight:600; margin-bottom:.3rem}
+  background:var(--preto); color:var(--offwhite); border-radius:var(--raio-p);
+  padding:.6rem .8rem; font-size:.78rem; z-index:50; min-width:178px;
+  box-shadow:0 8px 28px #00000050}
+#dica .m{font-weight:600; margin-bottom:.35rem; color:var(--areia)}
 #dica div.l{display:flex; justify-content:space-between; gap:1rem;
-  font-family:"IBM Plex Mono",monospace; font-variant-numeric:tabular-nums}
-#dica div.l span:first-child{font-family:"Archivo",sans-serif; color:var(--tinta-2)}
+  font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums}
+#dica div.l span:first-child{font-family:"Outfit",sans-serif; color:var(--cinza)}
 
-@media (max-width:700px){
-  .faixa{padding:.8rem 1rem}
-  main{padding:1.4rem 1rem 4rem}
-  nav.abas{padding:0 1rem}
+@media (max-width:760px){
+  .faixa{padding:.85rem 1rem}
+  main{padding:1.8rem 1rem 4rem}
+  nav.abas .interno{padding:0 1rem}
+  footer.rodape .interno{padding:1.2rem 1rem}
+  h1{font-size:1.6rem}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
-/* ---------------- registro da carga inicial ---------------- */
-pre.registro{margin:0; padding:.9rem 1.1rem; font-family:"IBM Plex Mono",monospace;
-  font-size:.78rem; line-height:1.65; color:var(--tinta-2); white-space:pre;
-  background:var(--papel-2)}
+/* =====================================================================
+   tela de entrada
+   ===================================================================== */
+body.porta{background:var(--preto); color:var(--offwhite);
+  display:grid; place-items:center; min-height:100vh; padding:2rem}
+.porta .caixa{width:100%; max-width:370px}
+.porta .marca{margin-bottom:2.6rem}
+.porta .marca svg{height:26px}
+.porta h1{font-size:1.45rem; color:var(--offwhite); margin-bottom:.3rem}
+.porta .sub{color:var(--cinza); font-size:.92rem; margin-bottom:2rem}
+.porta form{display:flex; flex-direction:column; gap:1rem}
+.porta label{display:flex; flex-direction:column; gap:.4rem; font-size:.7rem;
+  font-weight:600; letter-spacing:.15em; text-transform:uppercase;
+  color:var(--cinza)}
+.porta input{background:#141414; border:1px solid #2C2A27; color:var(--offwhite);
+  padding:.68rem .8rem; font-size:.98rem; border-radius:var(--raio-p)}
+.porta input:focus{border-color:var(--areia); outline:2px solid #E0D0BF33}
+.porta button{margin-top:.5rem; padding:.72rem; font-size:.95rem;
+  background:var(--areia); border-color:var(--areia); color:var(--preto);
+  font-weight:600}
+.porta button:hover{filter:brightness(1.06); background:var(--areia)}
+.porta .erro{padding:.8rem 1rem; border-radius:var(--raio-p); font-size:.88rem;
+  border:1px solid #D4764A; background:#D4764A1F; color:var(--offwhite);
+  margin-bottom:1.2rem; line-height:1.5}
+.porta .rodape{margin-top:1.8rem; font-size:.8rem; color:#6E6A65; line-height:1.6}
+
+/* =====================================================================
+   guia de preenchimento
+   ===================================================================== */
+.indice{display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:2.4rem}
+.indice a{font-size:.83rem; padding:.4rem .85rem; border-radius:999px;
+  border:1px solid var(--fio); background:var(--superficie);
+  text-decoration:none; color:var(--tinta-2)}
+.indice a:hover{border-color:var(--tinta-3); color:var(--tinta)}
+
+.verbete{border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie); padding:1.25rem 1.4rem; margin-bottom:.9rem}
+.verbete > h3{display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap;
+  margin-bottom:.55rem}
+.verbete .unidade{font-size:.68rem; font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--tinta-3)}
+.verbete p{margin:0 0 .7rem; font-size:.92rem; color:var(--tinta-2);
+  line-height:1.62; max-width:78ch}
+.verbete p:last-child{margin-bottom:0}
+.verbete dl{display:grid; grid-template-columns:auto 1fr; gap:.35rem 1rem;
+  margin:.9rem 0 0; font-size:.86rem}
+.verbete dt{font-size:.66rem; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--tinta-3); padding-top:.16rem}
+.verbete dd{margin:0; color:var(--tinta-2)}
+.verbete .exemplo{font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums;
+  color:var(--tinta)}
+.verbete .cuidado{border-left:3px solid var(--areia); padding-left:.9rem;
+  margin-top:.9rem; font-size:.88rem; color:var(--tinta-2)}
+.verbete .cuidado b{color:var(--tinta)}
+
+/* Ajuda embutida. O próprio nome da conta é o gatilho: clicar nele abre a
+   explicação dentro da célula, sem criar uma linha a mais na tabela. */
+details.ajuda{display:block}
+details.ajuda summary{cursor:pointer; list-style:none;
+  display:inline-flex; align-items:center; gap:.42rem}
+details.ajuda summary::-webkit-details-marker{display:none}
+details.ajuda summary::after{content:"?"; display:inline-grid; place-items:center;
+  width:15px; height:15px; border-radius:50%; border:1px solid var(--fio-forte);
+  font-size:.62rem; font-weight:700; line-height:1; color:var(--tinta-3);
+  flex:none}
+details.ajuda summary:hover::after{border-color:var(--tinta); color:var(--tinta)}
+details.ajuda[open] summary::after{background:var(--areia); border-color:var(--areia);
+  color:var(--preto)}
+/* Variante do formulário: só o disco, encostado no canto do campo. Aberto, a
+   explicação flutua por cima em vez de empurrar a grade — abrir uma ajuda não
+   pode reorganizar o formulário inteiro debaixo do cursor. */
+.campo-bloco{position:relative}
+.campo-bloco .ajuda.so-marca{position:absolute; top:0; right:0; margin:0}
+.campo-bloco .ajuda.so-marca .texto{position:absolute; top:calc(100% + .5rem);
+  right:0; z-index:20; width:max(260px, min(440px, 74vw));
+  background:var(--superficie); border:1px solid var(--fio-forte);
+  border-left:3px solid var(--areia); border-radius:var(--raio-p);
+  padding:.85rem 1rem; margin:0; max-width:none;
+  box-shadow:0 12px 34px #00000026}
+details.ajuda .texto{font-size:.83rem; color:var(--tinta-2); line-height:1.6;
+  border-left:2px solid var(--areia); padding-left:.8rem; max-width:64ch;
+  margin:.55rem 0 .2rem; font-weight:400; white-space:normal}
+details.ajuda .texto b{color:var(--tinta); font-weight:600}
+
+/* =====================================================================
+   cadastro de um estudo novo
+   ===================================================================== */
+.passos{display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:2rem;
+  font-size:.8rem}
+.passos a,.passos span{padding:.4rem .8rem; border-radius:999px;
+  border:1px solid var(--fio); text-decoration:none; color:var(--tinta-3);
+  background:var(--superficie)}
+.passos .atual{background:var(--acento); border-color:var(--acento);
+  color:var(--acento-tinta); font-weight:600}
+.passos .feito{color:var(--tinta-2); border-color:var(--fio-forte)}
+
+.formulario{display:grid; gap:1.6rem; max-width:820px}
+.grupo{border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie); padding:1.4rem 1.5rem}
+.grupo > h3{margin-bottom:.25rem}
+.grupo > .nota{font-size:.86rem; color:var(--tinta-2); margin:0 0 1.2rem;
+  max-width:74ch; line-height:1.6}
+.linha-campos{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+  gap:1.1rem}
+.campo-largo{grid-column:1/-1}
+.soma{display:flex; justify-content:space-between; align-items:baseline;
+  gap:1rem; padding:.75rem 1rem; border-radius:var(--raio-p);
+  background:var(--superficie-2); font-size:.88rem; margin-top:1.1rem}
+.soma .valor{font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums;
+  font-weight:600; font-size:1rem}
+.soma.errada{background:var(--realizado-fraco); color:var(--realizado)}
+.soma.certa{background:var(--areia-fraca)}
+
+/* =====================================================================
+   registro (carga inicial) e rodapé
+   ===================================================================== */
+pre.registro{margin:0; padding:1.1rem 1.3rem;
+  font-family:"Inter",ui-monospace,monospace; font-size:.8rem; line-height:1.7;
+  color:var(--tinta-2); white-space:pre; background:var(--superficie);
+  font-variant-numeric:tabular-nums}
+
+footer.rodape{border-top:1px solid var(--fio); margin-top:4rem}
+footer.rodape .interno{max-width:var(--largura); margin:0 auto;
+  padding:1.6rem; display:flex; gap:1rem; align-items:center; flex-wrap:wrap;
+  font-size:.8rem; color:var(--tinta-3)}
+footer.rodape svg{height:13px; color:var(--tinta-3)}
+
+/* =====================================================================
+   impressão
+   ===================================================================== */
+@media print{
+  header.topo,nav.abas,.acoes,footer.rodape{display:none}
+  body{background:#fff; color:#000; font-size:11px}
+  .rolagem,.painel,.cartao,.grafico{border-color:#ccc; break-inside:avoid}
+}

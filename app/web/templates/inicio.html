@@ -1,16 +1,30 @@
 {% extends "base.html" %}
-{% block titulo %}Empreendimentos{% endblock %}
+{% block titulo %}Empreendimentos · MMI Viabilidade{% endblock %}
 {% block conteudo %}
+
+<div class="regua"></div>
 <h1>Empreendimentos</h1>
-<p class="sub">Cada SPE com os indicadores do cenário marcado como principal.</p>
+<p class="sub">
+  Cada SPE com os números do cenário marcado como principal. O lucro é do
+  empreendimento inteiro, do lançamento à última parcela; a exposição máxima é o
+  pior saldo de caixa do caminho — quanto precisa estar disponível, e quando.
+</p>
 
 {% if not empreendimentos %}
-  <div class="aviso"><span><b>Nenhum empreendimento ainda.</b>
-    A <a href="/admin/carga">carga inicial</a> lê a planilha de incorrido e os
-    parâmetros da SPE e monta o primeiro cadastro — cenários e primeira rodada
-    incluídos.</span></div>
-  <p><a class="botao" href="/admin/carga">Fazer a carga inicial</a></p>
+  <div class="aviso calmo">
+    <span><b>Nenhum empreendimento ainda.</b>
+    Para começar um estudo do zero, use o <a href="/novo">cadastro guiado</a> —
+    ele explica cada campo enquanto você preenche. Se a SPE já existe numa
+    planilha de incorrido, a <a href="/admin/carga">carga inicial</a> monta o
+    cadastro inteiro de uma vez.</span>
+  </div>
 {% endif %}
+
+<div class="acoes">
+  <a class="botao principal" href="/novo">Novo estudo de viabilidade</a>
+  <a class="botao" href="/guia">Como preencher cada dado</a>
+  {% if not empreendimentos %}<a class="botao" href="/admin/carga">Carregar de uma planilha</a>{% endif %}
+</div>
 
 <div class="cartoes">
 {% for e in empreendimentos %}
