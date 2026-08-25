@@ -39,6 +39,42 @@ As migrations rodam sozinhas no startup — não há passo manual de schema.
 | `/empreendimento/{id}/importar` | upload dos exports do Sienge, com histórico |
 | `/api/docs` | a API, documentada |
 
+## Subir no Render
+
+O banco já existe: **viabilidade-db** (Postgres 16, Oregon, plano free) na
+workspace `pauloluz.engenharia@gmail.com`.
+
+> O plano free do Postgres do Render **expira em 24/09/2026**. Antes disso,
+> troque para `basic_256mb` (US$ 6/mês) no dashboard do banco — se expirar, os
+> dados são apagados.
+
+1. Crie o repositório no GitHub e dê push (o `git init` e o primeiro commit já
+   estão feitos aqui dentro):
+
+   ```bash
+   git remote add origin git@github.com:SEU-USUARIO/viabilidade.git
+   git push -u origin main
+   ```
+
+2. No dashboard do Render: **New → Blueprint**, aponte para o repositório. Ele
+   lê o `render.yaml`, sobe o serviço web e liga a `DATABASE_URL` ao banco que
+   já existe. Não precisa copiar credencial nenhuma.
+
+3. Carregue a SPE Kiev **uma vez**, da sua máquina, apontando para o banco de
+   produção (a *External Database URL* está no dashboard do banco):
+
+   ```bash
+   export DATABASE_URL="postgresql://...@oregon-postgres.render.com/viabilidade_db"
+   python3 migrar_kiev.py "caminho/para/26. Incorrido SPE Kiev.xlsx"
+   python3 -m pytest tests -q          # confere as 47 linhas contra a planilha
+   ```
+
+   Daí em diante os próximos empreendimentos entram pela tela de importação, sem
+   passar por planilha.
+
+O plano free do serviço web hiberna depois de 15 minutos sem acesso e leva uns
+30 segundos para acordar. Para uso de verdade, `starter` (US$ 7/mês) resolve.
+
 ## Arquitetura
 
 ```
