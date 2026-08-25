@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_campo.html" import campo %}
+{% block titulo %}{{ mod.titulo }} — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>{{ mod.titulo }}</h1>
+<p class="sub">{{ mod.resumo|safe }}</p>
+
+{% if mod.por_cenario %}
+<form method="get" class="acoes">
+  <label class="campo"><span class="rot">Cenário</span>
+    <select name="cenario" onchange="this.form.submit()">
+      {% for c in cenarios %}
+      <option value="{{ c.id }}" {{ 'selected' if c.id == cenario.id }}>
+        {{ c.nome }}{% if c.tipo == 'orcado' %} (congelado){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Trocar</button></noscript>
+</form>
+{% endif %}
+
+{% if congelado %}
+<div class="aviso"><span><b>Este cenário está congelado.</b> Ele é a viabilidade
+  aprovada no lançamento e existe para servir de referência — por isso não aceita
+  edição. Escolha um cenário de projeção acima.</span></div>
+{% endif %}
+
+{% if erros %}
+<div class="aviso"><span><b>Não gravei.</b>
+  <ul style="margin:.6rem 0 0; padding-left:1.1rem">
+    {% for e in erros %}<li style="margin-bottom:.3rem">{{ e }}</li>{% endfor %}
+  </ul></span></div>
+{% endif %}
+
+{% if salvo is not none %}
+  {% if salvo %}
+  <div class="aviso calmo"><span><b>{{ salvo|length }} campo(s) alterado(s):</b>
+    {{ salvo|join(', ') }}. O cenário está desatualizado até você recalcular.</span>
+    <form method="post" action="/empreendimento/{{ emp.id }}/recalcular">
+      <button class="principal" type="submit">Recalcular agora</button></form>
+  </div>
+  {% else %}
+  <div class="aviso calmo"><span>Nada mudou — os valores enviados são os que já
+    estavam gravados.</span></div>
+  {% endif %}
+{% endif %}
+
+<form method="post" class="formulario">
+  {% for g in mod.grupos %}
+  <section class="grupo">
+    <h3>{{ g.titulo }}</h3>
+    {% if g.nota %}<p class="nota-grupo">{{ g.nota }}</p>{% endif %}
+    <div class="linha-campos">
+      {% for c in g.campos %}{{ campo(c, valores.get(c.chave)) }}{% endfor %}
+    </div>
+    {% if mod.soma_cem and g.campos|map(attribute='chave')|select('in', mod.soma_cem)|list %}
+    <div class="soma" id="soma-modulo" data-campos="{{ mod.soma_cem|join(',') }}">
+      <span>Soma</span><span class="valor">—</span>
+    </div>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <div class="acoes">
+    <button class="principal" type="submit" {{ 'disabled' if congelado }}>Salvar</button>
+    <a class="botao" href="/empreendimento/{{ emp.id }}/dados">Voltar aos dados</a>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Soma conferida enquanto se digita. A trava de verdade é o CHECK do banco;
+// isto existe para o erro aparecer antes de rolar a página inteira.
+(function () {
+  const caixa = document.getElementById("soma-modulo");
+  if (!caixa) return;
+  const nomes = caixa.dataset.campos.split(",");
+  const campos = nomes.map(n => document.querySelector(`[name="${n}"]`)).filter(Boolean);
+  if (campos.length !== nomes.length) return;
+  const valor = caixa.querySelector(".valor");
+  function conta() {
+    const s = campos.reduce((t, c) => t + (parseFloat(String(c.value).replace(",", ".")) || 0), 0);
+    valor.textContent = (s * 100).toFixed(2).replace(".", ",") + "%";
+    const certa = Math.abs(s - 1) < 1e-6;
+    caixa.classList.toggle("certa", certa);
+    caixa.classList.toggle("errada", !certa);
+    caixa.firstElementChild.textContent = certa ? "Soma — fecha 100%"
+                                                : "Soma — precisa fechar 100%";
+  }
+  campos.forEach(c => c.addEventListener("input", conta));
+  conta();
+})();
+</script>
+{% endblock %}

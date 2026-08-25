@@ -21,12 +21,15 @@ from .importadores import gravar
 from .importadores.sienge import (ler_planilha, normalizar_contratos,
                                   normalizar_movimentos, normalizar_recebido,
                                   normalizar_receber, normalizar_unidades)
+from . import edicao
 from .glossario import SECOES, ajuda, ajuda_da_linha
 from .novo_estudo import FORMATOS_CURVA, Estudo
+from .novo_estudo import curva as curva_de
+from .novo_estudo import somar_meses
 from .novo_estudo import criar as criar_estudo
 from .repositorio import carregar_entradas
 from .seguranca import (COOKIE, DURACAO, conferir_senha, credenciais_configuradas,
-                        criar_sessao, exigir_login)
+                        criar_sessao, exigir_login, usuario_atual)
 from .seguranca import registrar as registrar_seguranca
 from .servico import calcular, rodar_e_persistir, visao_viabilidade
 
@@ -67,7 +70,18 @@ def mes_curto(d):
 templates.env.filters.update(moeda=moeda, milhoes=milhoes,
                              percentual=percentual, mes=mes_curto)
 # a explicação de cada linha mora no glossário; o template só a pendura
-templates.env.globals.update(ajuda_da_linha=ajuda_da_linha, ajuda=ajuda)
+def rotulo_do_campo(chave: str) -> str:
+    """Nome legível de um campo, para o histórico não falar em chave de banco."""
+    for mod in edicao.MODULOS.values():
+        for c in mod.campos:
+            if c.chave == chave:
+                return c.rotulo
+    v = ajuda(chave)
+    return v.titulo if v else chave
+
+
+templates.env.globals.update(ajuda_da_linha=ajuda_da_linha, ajuda=ajuda,
+                             rotulo_do_campo=rotulo_do_campo)
 
 
 @app.on_event("startup")
@@ -108,6 +122,283 @@ def sair():
     resposta = RedirectResponse("/entrar", status_code=303)
     resposta.delete_cookie(COOKIE)
     return resposta
+
+
+# ================================================================ dados
+#: os módulos na ordem em que aparecem na sub-navegação
+MENU_DADOS = [
+    {"slug": "cadastro",  "titulo": "Cadastro"},
+    {"slug": "premissas", "titulo": "Premissas"},
+    {"slug": "comercial", "titulo": "Preço e tabela"},
+    {"slug": "plano",     "titulo": "Plano de vendas"},
+    {"slug": "obra",      "titulo": "Obra"},
+    {"slug": "terreno",   "titulo": "Terreno"},
+    {"slug": "unidades",  "titulo": "Unidades"},
+]
+
+
+def _cenarios(s: Session, emp_id: int) -> list[dict]:
+    return q(s, """SELECT id, nome, tipo, principal FROM cenario
+                    WHERE empreendimento_id = :e
+                    ORDER BY tipo DESC, principal DESC, nome""", e=emp_id)
+
+
+def _cenario_escolhido(s: Session, emp_id: int, pedido: Optional[int]) -> dict:
+    cs = _cenarios(s, emp_id)
+    if not cs:
+        raise HTTPException(404, "empreendimento sem cenário cadastrado")
+    if pedido:
+        achado = next((c for c in cs if c["id"] == pedido), None)
+        if achado:
+            return achado
+    return next((c for c in cs if c["principal"]), cs[0])
+
+
+def _contexto_dados(s: Session, emp_id: int, modulo: str) -> dict:
+    return {"emp": _empreendimento(s, emp_id), "menu_dados": MENU_DADOS,
+            "modulo_atual": modulo, "aba": "dados"}
+
+
+@app.get("/empreendimento/{emp_id}/dados", response_class=HTMLResponse)
+def tela_dados(emp_id: int, request: Request, s: Session = Depends(sessao)):
+    """O hub: cada módulo com o resumo do que já tem dentro."""
+    ctx = _contexto_dados(s, emp_id, "")
+    cen = _cenario_escolhido(s, emp_id, None)
+    n = lambda sql, **kw: q(s, sql, **kw)[0]["n"]  # noqa: E731
+    ctx["resumo"] = {
+        "cadastro": f"{ctx['emp']['area_privativa']:,.0f} m² privativos".replace(",", " "),
+        "premissas": f"{n('SELECT count(*) AS n FROM premissa WHERE cenario_id = :c', c=cen['id'])} premissas · cenário {cen['nome']}",
+        "comercial": f"{n('SELECT count(*) AS n FROM tabela_venda WHERE empreendimento_id = :e', e=emp_id)} tabela(s) de venda",
+        "plano": f"{n('SELECT coalesce(sum(quantidade),0) AS n FROM plano_venda WHERE cenario_id = :c', c=cen['id'])} unidades no plano",
+        "obra": f"{n('SELECT count(*) AS n FROM orcamento_obra WHERE empreendimento_id = :e', e=emp_id)} versão(ões) de orçamento",
+        "terreno": f"{n('SELECT count(*) AS n FROM premissa_terreno WHERE cenario_id = :c', c=cen['id'])} parcela(s)",
+        "unidades": f"{n('SELECT count(*) AS n FROM unidade WHERE empreendimento_id = :e', e=emp_id)} unidades",
+    }
+    ctx["alteracoes"] = edicao.historico(s, emp_id, limite=6)
+    return templates.TemplateResponse(request, "dados.html", ctx)
+
+
+@app.get("/empreendimento/{emp_id}/dados/historico", response_class=HTMLResponse)
+def tela_historico(emp_id: int, request: Request, s: Session = Depends(sessao)):
+    ctx = _contexto_dados(s, emp_id, "historico")
+    ctx["eventos"] = edicao.historico(s, emp_id, limite=300)
+    return templates.TemplateResponse(request, "historico.html", ctx)
+
+
+# ------------------------------------------------ módulos de campos simples
+@app.get("/empreendimento/{emp_id}/dados/{slug}", response_class=HTMLResponse)
+def tela_modulo(emp_id: int, slug: str, request: Request,
+                cenario: Optional[int] = None, salvo: Optional[str] = None,
+                s: Session = Depends(sessao)):
+    if slug in ("plano", "obra", "terreno", "unidades"):
+        return _tela_lista(emp_id, slug, request, cenario, salvo, s)
+    mod = edicao.MODULOS.get(slug)
+    if not mod:
+        raise HTTPException(404, "módulo não encontrado")
+    ctx = _contexto_dados(s, emp_id, slug)
+    cen = _cenario_escolhido(s, emp_id, cenario) if mod.por_cenario else None
+    ctx.update(mod=mod, cenarios=_cenarios(s, emp_id) if mod.por_cenario else [],
+               cenario=cen, congelado=bool(cen and cen["tipo"] == "orcado"),
+               valores=edicao.LEITORES[slug](s, emp_id, cen["id"] if cen else None),
+               salvo=salvo.split("|") if salvo else None, erros=[])
+    return templates.TemplateResponse(request, "editar.html", ctx)
+
+
+@app.post("/empreendimento/{emp_id}/dados/{slug}")
+async def salvar_modulo(emp_id: int, slug: str, request: Request,
+                        cenario: Optional[int] = None,
+                        s: Session = Depends(sessao),
+                        autor: str = Depends(usuario_atual)):
+    mod = edicao.MODULOS.get(slug)
+    if not mod:
+        raise HTTPException(404, "módulo não encontrado")
+    cen = _cenario_escolhido(s, emp_id, cenario) if mod.por_cenario else None
+    if cen and cen["tipo"] == "orcado":
+        raise HTTPException(409, "cenário congelado não aceita edição")
+
+    enviado = dict(await request.form())
+    erros = _conferir_soma(mod, enviado)
+    if erros:
+        ctx = _contexto_dados(s, emp_id, slug)
+        ctx.update(mod=mod, cenarios=_cenarios(s, emp_id) if mod.por_cenario else [],
+                   cenario=cen, congelado=False, valores=enviado,
+                   salvo=None, erros=erros)
+        return templates.TemplateResponse(request, "editar.html", ctx,
+                                          status_code=422)
+
+    try:
+        mudou = edicao.GRAVADORES[slug](s, emp_id, cen["id"] if cen else None,
+                                        enviado, autor)
+        s.commit()
+    except Exception as e:                          # noqa: BLE001 — a tela mostra
+        s.rollback()
+        ctx = _contexto_dados(s, emp_id, slug)
+        ctx.update(mod=mod, cenarios=_cenarios(s, emp_id) if mod.por_cenario else [],
+                   cenario=cen, congelado=False, valores=enviado, salvo=None,
+                   erros=[f"O banco recusou: {e}"])
+        return templates.TemplateResponse(request, "editar.html", ctx,
+                                          status_code=422)
+
+    # o aviso fala o nome do campo, não a chave: "Marketing — stand", não
+    # "marketing_stand"
+    rotulos = {c.chave: c.rotulo for c in mod.campos}
+    return _voltar(emp_id, slug, [rotulos.get(k, k) for k in mudou], cen)
+
+
+def _conferir_soma(mod, enviado: dict) -> list[str]:
+    """A trava é o CHECK do banco; isto existe para a mensagem ser decente."""
+    if not mod.soma_cem:
+        return []
+    total = sum(edicao.num(enviado.get(k)) for k in mod.soma_cem)
+    if abs(total - 1) > 1e-6:
+        return [f"A tabela de venda soma {total*100:.2f}% e precisa somar "
+                f"exatamente 100%. Uma tabela que não fecha inventa um desconto — "
+                f"ou uma receita — que ninguém aprovou."]
+    return []
+
+
+# ------------------------------------------------------- módulos de lista
+def _tela_lista(emp_id: int, slug: str, request: Request,
+                cenario: Optional[int], salvo: Optional[str],
+                s: Session) -> HTMLResponse:
+    ctx = _contexto_dados(s, emp_id, slug)
+    por_cenario = slug in ("plano", "terreno")
+    cen = _cenario_escolhido(s, emp_id, cenario) if por_cenario else None
+    ctx.update(cenarios=_cenarios(s, emp_id) if por_cenario else [],
+               cenario=cen, congelado=bool(cen and cen["tipo"] == "orcado"),
+               salvo=salvo.split("|") if salvo else None, erros=[])
+
+    if slug == "plano":
+        ctx["linhas"] = edicao.ler_plano(s, cen["id"])
+        ctx["total"] = sum(int(l["quantidade"]) for l in ctx["linhas"])
+        ctx["estoque"] = q(s, """SELECT count(*) AS n FROM unidade
+                                  WHERE empreendimento_id = :e
+                                    AND considerar_na_viabilidade
+                                    AND situacao = 'Disponível'""", e=emp_id)[0]["n"]
+        return templates.TemplateResponse(request, "editar_plano.html", ctx)
+
+    if slug == "terreno":
+        ctx["parcelas"] = edicao.ler_terreno(s, cen["id"])
+        ctx["total"] = sum(float(p["valor"]) for p in ctx["parcelas"])
+        return templates.TemplateResponse(request, "editar_terreno.html", ctx)
+
+    if slug == "obra":
+        ctx.update(edicao.ler_obra(s, emp_id))
+        ctx["soma_curva"] = sum(float(c["perc_fisico"]) for c in ctx["curva"])
+        ctx["formatos"] = FORMATOS_CURVA
+        return templates.TemplateResponse(request, "editar_obra.html", ctx)
+
+    ctx["unidades"] = edicao.ler_unidades(s, emp_id)
+    ctx["situacoes"] = ("Disponível", "Reservada", "Vendida", "Permuta", "Distratada")
+    ctx["tipos"] = ("Normal", "Investidor", "Leal", "Garagem")
+    ctx["no_vgv"] = sum(1 for u in ctx["unidades"] if u["considerar_na_viabilidade"])
+    ctx["area_vgv"] = sum(float(u["area_privativa"]) for u in ctx["unidades"]
+                          if u["considerar_na_viabilidade"])
+    return templates.TemplateResponse(request, "editar_unidades.html", ctx)
+
+
+def _voltar(emp_id: int, slug: str, mudou: list, cen: Optional[dict]) -> RedirectResponse:
+    destino = f"/empreendimento/{emp_id}/dados/{slug}?salvo=" + "|".join(mudou)
+    if cen:
+        destino += f"&cenario={cen['id']}"
+    return RedirectResponse(destino, status_code=303)
+
+
+@app.post("/empreendimento/{emp_id}/dados/plano/salvar")
+async def salvar_plano(emp_id: int, request: Request, cenario: Optional[int] = None,
+                       s: Session = Depends(sessao),
+                       autor: str = Depends(usuario_atual)):
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    if cen["tipo"] == "orcado":
+        raise HTTPException(409, "cenário congelado não aceita edição")
+    f = await request.form()
+    linhas = []
+    for mes, tipo, qtd in zip(f.getlist("mes"), f.getlist("tipo"),
+                              f.getlist("quantidade")):
+        d = edicao.data(mes)
+        if d:
+            linhas.append((edicao.fim_do_mes(d), tipo or "Normal",
+                           edicao.inteiro(qtd)))
+    mudou = edicao.gravar_plano(s, emp_id=emp_id, cenario_id=cen["id"],
+                                linhas=linhas, autor=autor)
+    s.commit()
+    return _voltar(emp_id, "plano", mudou, cen)
+
+
+@app.post("/empreendimento/{emp_id}/dados/terreno/salvar")
+async def salvar_terreno(emp_id: int, request: Request, cenario: Optional[int] = None,
+                         s: Session = Depends(sessao),
+                         autor: str = Depends(usuario_atual)):
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    if cen["tipo"] == "orcado":
+        raise HTTPException(409, "cenário congelado não aceita edição")
+    f = await request.form()
+    parcelas = [(edicao.num(v), edicao.data(d))
+                for v, d in zip(f.getlist("valor"), f.getlist("vencimento"))]
+    mudou = edicao.gravar_terreno(s, emp_id=emp_id, cenario_id=cen["id"],
+                                  parcelas=parcelas, autor=autor)
+    s.commit()
+    return _voltar(emp_id, "terreno", mudou, cen)
+
+
+@app.post("/empreendimento/{emp_id}/dados/obra/salvar")
+async def salvar_obra(emp_id: int, request: Request, s: Session = Depends(sessao),
+                      autor: str = Depends(usuario_atual)):
+    f = await request.form()
+    orcamento_id = edicao.inteiro(f.get("orcamento_id"))
+    curva: list = []
+
+    # duas maneiras de dar a curva: gerar por formato, ou digitar mês a mês
+    if f.get("acao") == "gerar":
+        inicio = edicao.data(f.get("inicio_obra"))
+        meses = edicao.inteiro(f.get("meses_obra"), 36)
+        formato = f.get("formato_curva") or "s_suave"
+        if not inicio or meses < 1:
+            raise HTTPException(422, "informe o início e a duração da obra")
+        curva = [(somar_meses(inicio, i), fracao)
+                 for i, fracao in enumerate(curva_de(formato, meses))]
+    else:
+        for mes, perc in zip(f.getlist("mes"), f.getlist("perc")):
+            d = edicao.data(mes)
+            if d:
+                curva.append((edicao.fim_do_mes(d), edicao.num(perc)))
+
+    soma = sum(p for _, p in curva)
+    if curva and abs(soma - 1) > 1e-6:
+        raise HTTPException(
+            422, f"a curva soma {soma*100:.4f}% e precisa somar 100%. A curva "
+                 f"distribui o custo no tempo — ela não pode mudar o custo.")
+
+    try:
+        mudou = edicao.gravar_obra(s, emp_id=emp_id, orcamento_id=orcamento_id,
+                                   custo_raso=edicao.num(f.get("custo_raso")),
+                                   versao=edicao.texto(f.get("versao")),
+                                   curva=curva, autor=autor,
+                                   substituir_eap=f.get("substituir_eap") == "1")
+        s.commit()
+    except ValueError as e:                         # recusa nossa, com explicação
+        s.rollback()
+        raise HTTPException(422, str(e))
+    except Exception as e:                          # noqa: BLE001
+        s.rollback()
+        raise HTTPException(422, f"o banco recusou: {e}")
+    return _voltar(emp_id, "obra", mudou, None)
+
+
+@app.post("/empreendimento/{emp_id}/dados/unidades/salvar")
+async def salvar_unidade(emp_id: int, request: Request,
+                         s: Session = Depends(sessao),
+                         autor: str = Depends(usuario_atual)):
+    f = await request.form()
+    try:
+        mudou = edicao.gravar_unidade(s, emp_id=emp_id,
+                                      unidade_id=edicao.inteiro(f.get("unidade_id")),
+                                      enviado=dict(f), autor=autor)
+        s.commit()
+    except Exception as e:                          # noqa: BLE001
+        s.rollback()
+        raise HTTPException(422, f"o banco recusou: {e}")
+    return _voltar(emp_id, "unidades", mudou, None)
 
 
 # ================================================================ guia

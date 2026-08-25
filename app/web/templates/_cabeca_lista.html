@@ -1,0 +1,34 @@
+{# Cabeçalho comum às telas de lista: seletor de cenário, avisos e o resultado
+   da última gravação. #}
+{% if cenarios %}
+<form method="get" class="acoes">
+  <label class="campo"><span class="rot">Cenário</span>
+    <select name="cenario" onchange="this.form.submit()">
+      {% for c in cenarios %}
+      <option value="{{ c.id }}" {{ 'selected' if c.id == cenario.id }}>
+        {{ c.nome }}{% if c.tipo == 'orcado' %} (congelado){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <noscript><button type="submit">Trocar</button></noscript>
+</form>
+{% endif %}
+
+{% if congelado %}
+<div class="aviso"><span><b>Este cenário está congelado.</b> Ele é a viabilidade
+  aprovada no lançamento e existe para servir de referência — por isso não aceita
+  edição. Escolha um cenário de projeção acima.</span></div>
+{% endif %}
+
+{% if salvo is not none %}
+  {% if salvo %}
+  <div class="aviso calmo"><span><b>Alterado:</b> {{ salvo|join(', ') }}.
+    O cenário está desatualizado até você recalcular.</span>
+    <form method="post" action="/empreendimento/{{ emp.id }}/recalcular">
+      <button class="principal" type="submit">Recalcular agora</button></form>
+  </div>
+  {% else %}
+  <div class="aviso calmo"><span>Nada mudou — os valores enviados são os que já
+    estavam gravados.</span></div>
+  {% endif %}
+{% endif %}

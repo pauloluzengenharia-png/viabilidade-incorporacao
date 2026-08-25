@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block titulo %}Unidades — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Unidades</h1>
+<p class="sub">
+  O cadastro que forma o VGV. Cada linha se salva sozinha — não existe botão de
+  salvar tudo, porque numa lista de duzentas unidades um envio único
+  transformaria qualquer erro de digitação em duzentas alterações no histórico.
+</p>
+
+{% include "_cabeca_lista.html" %}
+
+<dl class="painel">
+  <div class="cel"><dt>No VGV</dt><dd>{{ no_vgv }}</dd>
+    <span class="nota">de {{ unidades|length }} cadastradas</span></div>
+  <div class="cel"><dt>Área privativa no VGV</dt><dd>{{ area_vgv|moeda(2) }}<small>m²</small></dd>
+    <span class="nota">cadastro do empreendimento diz {{ emp.area_privativa|moeda(2) }}</span></div>
+  <div class="cel {{ 'neg' if (area_vgv - emp.area_privativa|float)|abs > 0.01 }}">
+    <dt>Diferença</dt><dd>{{ (area_vgv - emp.area_privativa|float)|moeda(2) }}<small>m²</small></dd>
+    <span class="nota">precisa ser zero</span></div>
+</dl>
+
+{% if (area_vgv - emp.area_privativa|float)|abs > 0.01 %}
+<div class="aviso"><span><b>A soma das unidades não bate com a área do cadastro.</b>
+  Essa foi a diferença que mais deu trabalho na migração da Kiev — o cadastro do
+  Sienge e a lista que a planilha usava para o VGV não eram a mesma lista. O certo
+  é resolver a divergência, não escolher um dos dois números.</span></div>
+{% endif %}
+
+<div class="rolagem">
+  <table class="editavel">
+    <thead><tr>
+      <th class="conta" style="min-width:140px">Unidade</th>
+      <th class="n" style="width:120px">Área m²</th>
+      <th class="n" style="width:160px">Preço de tabela</th>
+      <th style="width:150px">Situação</th>
+      <th style="width:140px">Tipo</th>
+      <th style="width:90px">No VGV</th>
+      <th style="min-width:200px">Motivo da exclusão</th>
+      <th style="width:96px"></th>
+    </tr></thead>
+    <tbody>
+    {% for u in unidades %}
+      <tr>
+        <form method="post" action="/empreendimento/{{ emp.id }}/dados/unidades/salvar"
+              id="u{{ u.id }}"></form>
+        <td class="conta">
+          <input type="hidden" name="unidade_id" value="{{ u.id }}" form="u{{ u.id }}">
+          <b>{{ u.nome }}</b>
+          {% if u.tipo_imovel %}<br><span class="rotulo">{{ u.tipo_imovel }}</span>{% endif %}
+        </td>
+        <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="area_privativa" 
+                   value="{{ u.area_privativa }}" form="u{{ u.id }}"></td>
+        <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="preco_bruto" 
+                   value="{{ u.preco_bruto or '' }}" form="u{{ u.id }}"></td>
+        <td><select name="situacao" form="u{{ u.id }}">
+          {% for sit in situacoes %}
+          <option value="{{ sit }}" {{ 'selected' if u.situacao == sit }}>{{ sit }}</option>
+          {% endfor %}</select></td>
+        <td><select name="tipo_venda" form="u{{ u.id }}">
+          {% for t in tipos %}
+          <option value="{{ t }}" {{ 'selected' if u.tipo_venda == t }}>{{ t }}</option>
+          {% endfor %}</select></td>
+        <td><select name="considerar" form="u{{ u.id }}">
+          <option value="1" {{ 'selected' if u.considerar_na_viabilidade }}>sim</option>
+          <option value="0" {{ '' if u.considerar_na_viabilidade else 'selected' }}>não</option>
+        </select></td>
+        <td><input type="text" name="motivo_exclusao" form="u{{ u.id }}"
+                   value="{{ u.motivo_exclusao or '' }}"
+                   placeholder="obrigatório se estiver fora"></td>
+        <td><button type="submit" form="u{{ u.id }}">Salvar</button></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="legenda-tab">
+  Tirar uma unidade do VGV é uma decisão, não um esquecimento — por isso o banco
+  exige o motivo escrito ao lado. O preço é versionado: gravar um novo não apaga
+  o anterior, ele fica no histórico.
+</p>
+{% endblock %}

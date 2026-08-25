@@ -556,3 +556,57 @@ html{scroll-behavior:smooth; scroll-padding-top:calc(var(--altura-fixa, 110px) +
   ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){
     animation:none!important}
 }
+
+/* =====================================================================
+   módulos de dados
+   ===================================================================== */
+.submenu{display:flex; gap:.3rem; flex-wrap:wrap; align-items:center;
+  margin:0 0 2.2rem; padding-bottom:.9rem; border-bottom:1px solid var(--fio)}
+.submenu a{padding:.36rem .8rem; font-size:.84rem; font-weight:500;
+  text-decoration:none; color:var(--tinta-2); border-radius:999px;
+  border:1px solid transparent; white-space:nowrap;
+  transition:background .12s, border-color .12s, color .12s}
+.submenu a:hover{background:var(--superficie-2); color:var(--tinta)}
+.submenu a.ativa{border-color:var(--areia-funda); color:var(--tinta);
+  background:var(--areia-fraca); font-weight:600}
+
+.nota-grupo{font-size:.86rem; color:var(--tinta-2); margin:0 0 1.2rem;
+  max-width:74ch; line-height:1.6}
+
+/* cartões do hub */
+.modulos{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:1rem}
+.modulo{border:1px solid var(--fio); border-radius:var(--raio);
+  background:var(--superficie); padding:1.2rem 1.3rem 1.3rem;
+  text-decoration:none; color:inherit; display:flex; flex-direction:column;
+  gap:.45rem; transition:border-color .12s, transform .12s}
+.modulo:hover{border-color:var(--tinta-3); transform:translateY(-1px)}
+.modulo h3{margin:0}
+.modulo p{margin:0; font-size:.86rem; color:var(--tinta-2); line-height:1.55}
+.modulo .estado{margin-top:auto; padding-top:.7rem; font-size:.8rem;
+  color:var(--tinta-3); font-family:"Inter",sans-serif;
+  font-variant-numeric:tabular-nums}
+
+/* linhas editáveis (plano, terreno, curva, unidades) */
+table.editavel input,table.editavel select{padding:.34rem .5rem; font-size:.86rem}
+table.editavel td{padding:.42rem .6rem; vertical-align:middle}
+table.editavel td:first-child{min-width:0}
+table.editavel .apagar{color:var(--tinta-3); border:0; background:none;
+  padding:.2rem .45rem; font-size:1rem; line-height:1; border-radius:4px}
+table.editavel .apagar:hover{color:var(--realizado); background:var(--realizado-fraco)}
+.largura-media{max-width:900px}
+
+/* histórico */
+.evento{display:grid; grid-template-columns:auto 1fr auto; gap:.3rem 1rem;
+  padding:.85rem 0; border-bottom:1px solid var(--fio); align-items:baseline}
+.evento:last-child{border-bottom:0}
+.evento .quando{font-family:"Inter",sans-serif; font-size:.78rem;
+  color:var(--tinta-3); font-variant-numeric:tabular-nums; white-space:nowrap}
+.evento .oque{font-size:.92rem}
+.evento .oque b{font-weight:600}
+.evento .quem{font-size:.78rem; color:var(--tinta-3); white-space:nowrap}
+.evento .de-para{grid-column:2; font-family:"Inter",sans-serif; font-size:.84rem;
+  font-variant-numeric:tabular-nums; color:var(--tinta-2)}
+.evento .de-para .antes{color:var(--tinta-3); text-decoration:line-through}
+.evento .de-para .seta{color:var(--tinta-3); margin:0 .45rem}
+.evento .de-para .depois{color:var(--tinta); font-weight:600}

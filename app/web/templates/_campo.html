@@ -1,0 +1,36 @@
+{% macro campo(c, valor) %}
+  <div class="campo-bloco">
+    <label class="campo {{ 'numerico' if c.tipo in ('numero','inteiro') }}">
+      <span class="rot">{{ c.rotulo }}{% if c.sufixo %} <span class="fraco">{{ c.sufixo }}</span>{% endif %}</span>
+      {%- if c.tipo == 'escolha' %}
+      <select name="{{ c.chave }}">
+        {% for o in c.opcoes %}
+        <option value="{{ o }}" {{ 'selected' if (valor|string) == o }}>{{ o or '— nenhum —' }}</option>
+        {% endfor %}
+      </select>
+      {%- elif c.tipo == 'data' %}
+      <input type="date" name="{{ c.chave }}" value="{{ valor or '' }}">
+      {%- else %}
+      {#- Campo numérico é texto com teclado decimal, não input[type=number]:
+          o número do navegador recusa vírgula quando o idioma dele é outro, e
+          o texto da tela pede vírgula. O servidor aceita os dois jeitos. -#}
+      <input type="text" name="{{ c.chave }}"
+             value="{{ valor if valor is not none else '' }}"
+             {% if c.tipo in ('numero','inteiro') %}inputmode="decimal"
+             autocomplete="off"{% endif %}>
+      {%- endif %}
+    </label>
+    {% set v = c.verbete %}
+    {% if v %}
+    <details class="ajuda so-marca">
+      <summary title="O que é: {{ v.titulo }}" aria-label="O que é: {{ v.titulo }}"></summary>
+      <div class="texto">
+        <b>{{ v.titulo }}.</b> {{ v.o_que }}
+        {%- if v.como %} <b>Como preencher:</b> {{ v.como }}{% endif %}
+        {%- if v.exemplo %} <b>Na Kiev:</b> {{ v.exemplo }}{% endif %}
+        {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado }}{% endif %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+{% endmacro %}

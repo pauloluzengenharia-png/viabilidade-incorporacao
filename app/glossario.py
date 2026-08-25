@@ -63,6 +63,17 @@ indicadores da tela.""", [
         como="Só é obrigatório se você for importar do Sienge. Sem ele o sistema funciona, mas você digita tudo à mão.",
         exemplo="26003"),
 
+    Verbete("cnpj", "CNPJ da SPE", "texto",
+        o_que="O CNPJ da sociedade de propósito específico do empreendimento.",
+        de_onde="Contrato social da SPE.",
+        como="Opcional. Serve para identificação em relatório; o sistema não usa em cálculo nenhum."),
+
+    Verbete("sienge_company_id", "Código da empresa no Sienge", "número",
+        o_que="O id da empresa (não do empreendimento) dentro do Sienge. Os lançamentos financeiros vêm amarrados a ele.",
+        de_onde="Sienge, no cadastro da empresa.",
+        como="Opcional, e só necessário para a importação do financeiro da obra.",
+        exemplo="26"),
+
     Verbete("area_privativa", "Área privativa total", "m²",
         o_que="A soma da área privativa de todas as unidades que entram no VGV. É a base de quase tudo: preço por m², custo raso por m² e eficiência.",
         de_onde="Quadro de áreas do projeto, conferido contra o cadastro de unidades do Sienge.",
@@ -116,6 +127,13 @@ for, porque uma tabela que soma 97% inventa um desconto invisível de 3%.""", [
         de_onde="Quadro de áreas do projeto.",
         como="Conte só o que entra no VGV. No cadastro guiado, o sistema cria essas unidades com a área média e o preço de tabela — quando o cadastro real chegar do Sienge, a importação substitui.",
         exemplo="201"),
+
+    Verbete("usar_preco_tabela", "Usar o preço de tabela cadastrado", "sim ou não",
+        o_que="Se o estoque é precificado unidade a unidade, pelo preço já cadastrado em cada uma, ou pela área × o preço por m² deste cenário.",
+        de_onde="Decisão de como o cenário quer simular.",
+        como="O cenário realista costuma usar “sim”, porque a tabela cadastrada é a que está valendo. O otimista e o pessimista usam “não” — é justamente mexendo no preço por m² que eles se diferenciam.",
+        cuidado="Com “sim”, mudar o preço do estoque não muda nada: o motor está lendo o preço de cada unidade e ignorando o campo. É a causa mais comum de “editei e o número não mexeu”.",
+        exemplo="sim"),
 
     Verbete("comissao", "Comissão sobre vendas", "% do bruto",
         o_que="O que fica com quem vendeu. Sai de dentro do preço: o cliente paga 100, a corretora fica com a comissão e a SPE recebe o resto.",

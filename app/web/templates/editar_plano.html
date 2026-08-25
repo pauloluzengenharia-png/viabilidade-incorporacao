@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block titulo %}Plano de vendas — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Plano de vendas</h1>
+<p class="sub">
+  Quantas unidades você assume vender em cada mês. O motor pega esse número,
+  aplica a tabela de venda e gera as parcelas de cada coorte. É a premissa que o
+  mercado controla e você não — vale ter uma versão diferente em cada cenário.
+</p>
+
+{% include "_cabeca_lista.html" %}
+
+<form method="post" action="/empreendimento/{{ emp.id }}/dados/plano/salvar?cenario={{ cenario.id }}"
+      class="largura-media">
+  <div class="rolagem">
+    <table class="editavel" id="tabela-plano">
+      <thead><tr>
+        <th style="width:210px">Mês</th>
+        <th style="width:190px">Tipo de venda</th>
+        <th class="n" style="width:150px">Unidades</th>
+        <th style="width:52px"></th>
+      </tr></thead>
+      <tbody>
+      {% for l in linhas %}
+        <tr>
+          <td><input type="date" name="mes" value="{{ l.mes }}"></td>
+          <td><select name="tipo">
+            {% for t in ('Normal','Investidor','Leal','Garagem') %}
+            <option value="{{ t }}" {{ 'selected' if l.tipo_venda == t }}>{{ t }}</option>
+            {% endfor %}
+          </select></td>
+          <td class="numerico"><input type="text" inputmode="numeric" autocomplete="off" name="quantidade"  min="0"
+                     value="{{ l.quantidade }}"></td>
+          <td><button type="button" class="apagar" title="Remover a linha"
+                      aria-label="Remover a linha">&times;</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="soma certa" id="soma-plano">
+    <span>Unidades no plano</span>
+    <span class="valor">{{ total }}</span>
+  </div>
+  <p class="legenda-tab">
+    Há <b>{{ estoque }}</b> unidade(s) disponíveis no cadastro. Se o plano somar
+    menos que isso, a diferença nunca entra no fluxo — fica estoque sem mês de
+    venda, e o VGV projetado não se realiza.
+  </p>
+
+  <div class="acoes" style="margin-top:1.4rem">
+    <button type="button" id="mais-uma">Adicionar mês</button>
+    <button class="principal" type="submit" {{ 'disabled' if congelado }}>Salvar plano</button>
+    <a class="botao" href="/empreendimento/{{ emp.id }}/dados">Voltar aos dados</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const corpo = document.querySelector("#tabela-plano tbody");
+  const soma = document.querySelector("#soma-plano .valor");
+  function conta() {
+    const t = [...corpo.querySelectorAll('[name="quantidade"]')]
+        .reduce((a, i) => a + (parseInt(i.value, 10) || 0), 0);
+    soma.textContent = t;
+  }
+  document.getElementById("mais-uma").addEventListener("click", () => {
+    const ultima = corpo.lastElementChild;
+    const nova = (ultima || corpo).cloneNode(true);
+    if (!ultima) return;
+    nova.querySelector('[name="quantidade"]').value = "";
+    // sugere o mês seguinte ao último preenchido
+    const d = nova.querySelector('[name="mes"]');
+    if (d.value) {
+      const [a, m] = d.value.split("-").map(Number);
+      const prox = new Date(Date.UTC(a, m, 0));   // último dia do mês seguinte
+      prox.setUTCMonth(prox.getUTCMonth() + 1);
+      d.value = new Date(Date.UTC(prox.getUTCFullYear(), prox.getUTCMonth() + 1, 0))
+          .toISOString().slice(0, 10);
+    }
+    corpo.appendChild(nova);
+    nova.querySelector('[name="quantidade"]').focus();
+    conta();
+  });
+  corpo.addEventListener("click", e => {
+    if (!e.target.closest(".apagar")) return;
+    if (corpo.children.length > 1) e.target.closest("tr").remove();
+    conta();
+  });
+  corpo.addEventListener("input", conta);
+})();
+</script>
+{% endblock %}

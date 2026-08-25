@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block titulo %}Histórico — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Histórico de alterações</h1>
+<p class="sub">
+  Quem mudou o quê, quando, e de qual valor para qual. Só as edições feitas pelas
+  telas de dados — o que entra pela importação do Sienge tem o próprio registro,
+  na tela de importação, porque anotar 2.612 parcelas uma a uma encheria esta
+  lista sem informar nada.
+</p>
+
+{% if not eventos %}
+<div class="aviso calmo"><span>Nada foi editado pelas telas ainda.</span></div>
+{% else %}
+<div class="rolagem" style="padding:.4rem 1.4rem">
+  {% for a in eventos %}
+  <div class="evento">
+    <span class="quando">{{ a.em.strftime('%d/%m/%Y %H:%M') }}</span>
+    <span class="oque"><b>{{ rotulo_do_campo(a.campo) }}</b> em {{ a.entidade }}
+      <span class="fraco">· {{ a.modulo }}{% if a.cenario %} · cenário {{ a.cenario }}{% endif %}</span></span>
+    <span class="quem">{{ a.autor }}</span>
+    <span class="de-para">
+      <span class="antes">{{ a.valor_anterior if a.valor_anterior is not none else '—' }}</span>
+      <span class="seta">→</span>
+      <span class="depois">{{ a.valor_novo if a.valor_novo is not none else 'removido' }}</span>
+    </span>
+  </div>
+  {% endfor %}
+</div>
+<p class="legenda-tab">Mostrando as {{ eventos|length }} alterações mais recentes.</p>
+{% endif %}
+{% endblock %}

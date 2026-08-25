@@ -1,0 +1,11 @@
+{# Sub-navegação dos módulos de dados. Fica no topo de toda tela de edição para
+   não obrigar a voltar ao hub a cada troca de assunto. #}
+<nav class="submenu">
+  {% for m in menu_dados %}
+  <a href="/empreendimento/{{ emp.id }}/dados/{{ m.slug }}"
+     class="{{ 'ativa' if m.slug == modulo_atual }}">{{ m.titulo }}</a>
+  {% endfor %}
+  <span style="flex:1"></span>
+  <a href="/empreendimento/{{ emp.id }}/dados/historico"
+     class="{{ 'ativa' if modulo_atual == 'historico' }}">Histórico</a>
+</nav>

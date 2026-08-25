@@ -70,6 +70,24 @@ def sessao_valida(valor: str | None) -> bool:
     return int(corpo.get("exp", 0)) > time.time()
 
 
+def usuario_da_sessao(valor: str | None) -> str | None:
+    """
+    O nome de quem está logado, lido do cookie já verificado.
+
+    Existe para o registro de alterações ter autor. Hoje há uma credencial só e
+    a resposta é sempre a mesma — mas quando houver tabela de usuários, o cookie
+    já carrega o nome e nada mais precisa mudar.
+    """
+    if not sessao_valida(valor):
+        return None
+    dados = valor.rpartition(".")[0]
+    try:
+        corpo = json.loads(base64.urlsafe_b64decode(dados + "=" * (-len(dados) % 4)))
+    except Exception:
+        return None
+    return corpo.get("u")
+
+
 def conferir_senha(usuario: str, senha: str) -> bool:
     conf = credenciais_configuradas()
     if conf is None:
@@ -96,6 +114,11 @@ async def exigir_login(request: Request):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "sessão ausente ou expirada")
     raise HTTPException(status.HTTP_307_TEMPORARY_REDIRECT, "login necessário",
                         headers={"Location": f"/entrar?de={caminho}"})
+
+
+async def usuario_atual(request: Request) -> str:
+    """Dependência das rotas que escrevem: sem autor, não se grava histórico."""
+    return usuario_da_sessao(request.cookies.get(COOKIE)) or "desconhecido"
 
 
 def registrar(app) -> None:

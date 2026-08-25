@@ -54,6 +54,8 @@ As migrations rodam sozinhas no startup — não há passo manual de schema.
 | `/empreendimento/{id}/importar` | upload dos exports do Sienge, com histórico |
 | `/novo` | **cadastro guiado**: cria um estudo do zero, com a explicação de cada campo |
 | `/guia` | **como preencher cada dado**: o manual, campo a campo |
+| `/empreendimento/{id}/dados` | **os módulos de entrada de dados**, um por assunto |
+| `/empreendimento/{id}/dados/historico` | quem mudou o quê, quando, e de qual valor para qual |
 | `/admin/carga` | **carga inicial**: sobe a planilha + os parâmetros e monta a primeira SPE |
 | `/api/docs` | a API, documentada |
 
@@ -115,6 +117,7 @@ app/
     sienge.py    normalização — hoje lê xlsx, amanhã lê a API, mesmas regras
     gravar.py    gravação idempotente
   glossario.py   ← o que é cada dado: fonte única do guia E da ajuda nas telas
+  edicao.py      ← os módulos de entrada: campos declarados, diferença e histórico
   novo_estudo.py ← criação de um estudo do zero, com validação que lista tudo
   main.py        ← FastAPI: telas e API
 migrations/      ← .sql numerados, aplicados uma vez cada
@@ -282,14 +285,75 @@ O que não é simplificado: as travas continuam valendo. A tabela de venda soma
 devolve a lista completa de problemas de uma vez, em vez de parar no primeiro —
 quem preenche 40 campos merece ver os quatro erros juntos.
 
+## Os módulos de entrada de dados
+
+Sete telas, uma por assunto, em `/empreendimento/{id}/dados`:
+
+| módulo | o que edita |
+|---|---|
+| Cadastro | nome, códigos do Sienge, áreas, datas, mês de corte |
+| Premissas | impostos, taxas, marketing, correção monetária, TMA — por cenário |
+| Preço e tabela | preço do estoque e a tabela que divide o preço no tempo |
+| Plano de vendas | quantas unidades saem por mês |
+| Obra | custo raso do orçamento vigente e a curva física |
+| Terreno | as parcelas pagas em dinheiro |
+| Unidades | área, preço, situação e quem fica fora do VGV |
+
+Quatro decisões que valem registrar:
+
+**A definição é declarativa.** Um módulo é uma lista de campos em `app/edicao.py`;
+uma tela genérica desenha qualquer lista, e o texto do "?" de cada campo vem do
+glossário — o mesmo que alimenta `/guia`. Um teste falha se algum campo de
+módulo não tiver verbete: um "?" que não abre é pior que não ter "?".
+
+**Nada é gravado sem diferença.** Toda gravação lê o que está lá, compara e só
+escreve o que mudou. É isso que faz o histórico ser honesto — ele lista o que de
+fato mudou, não os quarenta campos que o formulário enviou.
+
+**O cenário congelado não aceita edição.** O orçado é a viabilidade aprovada no
+lançamento; ele existe para servir de referência. A tela desabilita e a rota
+responde 409.
+
+**A curva agregada não desmonta a EAP sozinha.** Um orçamento com 25 itens de
+EAP tem 25 cronogramas; a tela mostra a curva agregada, ponderada pelo peso de
+cada item. Gravar essa curva agregada trocaria os 25 por um item só — e ela não
+sabe reconstruir os 25 de onde veio. Por isso a substituição exige confirmação
+explícita, e sem ela a gravação da curva é recusada com a explicação.
+
+### O caso ambíguo do ponto
+
+`250.000` pode ser duzentos e cinquenta mil ou duzentos e cinquenta. A primeira
+versão desta tela leu como 250 e um orçamento de marketing de R$ 250 entrou no
+estudo. A regra agora é explícita e testada: com vírgula não há dúvida; sem
+vírgula, um ponto seguido de exatamente três dígitos é milhar, **exceto** quando
+a parte inteira é só `0` — `0.045` é decimal, `250.000` é milhar. Dois ou mais
+pontos são sempre milhar.
+
+Pelo mesmo motivo os campos numéricos são `type="text"` com `inputmode="decimal"`
+em vez de `type="number"`: o campo numérico do navegador recusa vírgula quando o
+idioma dele é outro, e o texto da tela pede vírgula.
+
+## Histórico de alterações
+
+`alteracao` guarda valor anterior, valor novo, quem e quando, para toda edição
+feita pelas telas de dados. A importação do Sienge não passa por ali — ela tem o
+próprio histórico em `importacao`, e registrar 2.612 parcelas uma a uma encheria
+a tabela sem informar nada.
+
+O autor sai do cookie de sessão. Hoje há uma credencial só e a resposta é sempre
+`mmi`; quando houver tabela de usuários, o cookie já carrega o nome e nada mais
+precisa mudar.
+
 ## O que ainda não existe
 
 - **Usuários individuais.** Hoje é uma credencial só para todo mundo. Não há
   registro de quem mexeu em qual premissa.
-- **Edição das premissas pela tela.** `/novo` cria; depois disso, mudar uma
-  premissa ainda é `UPDATE` no banco seguido de Recalcular.
-- **Cronograma de obra detalhado pela tela.** A curva por formato resolve o
-  estudo inicial; a EAP de 21 itens continua entrando por migração ou importação.
+- **Editar um item da EAP isoladamente.** A tela de obra mostra e grava a curva
+  agregada; mexer num item só continua sendo importação.
+- **Criar e apagar cenários pela tela.** Os três nascem na carga; a tela edita os
+  que existem.
+- **Desfazer uma alteração.** O histórico mostra o valor anterior, mas voltar a
+  ele ainda é digitar de novo.
 - **Financiamento à produção.** O motor tem o bloco (`_linhas_financiamento`,
   liberação por evolução de obra, juros e amortização) e ele está desligado
   porque a Kiev tem limite zero. Falta a tela para cadastrar o contrato.

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block titulo %}Terreno — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Terreno</h1>
+<p class="sub">
+  A parte paga em dinheiro, parcela a parcela. A <strong>permuta</strong> não
+  entra aqui: ela vem das unidades marcadas como permuta no cadastro, porque é
+  custo do estudo mas não é saída de caixa — e é essa diferença que faz o lucro
+  fechar e o caixa não.
+</p>
+
+{% include "_cabeca_lista.html" %}
+
+<form method="post" action="/empreendimento/{{ emp.id }}/dados/terreno/salvar?cenario={{ cenario.id }}"
+      class="largura-media">
+  <div class="rolagem">
+    <table class="editavel" id="tabela-terreno">
+      <thead><tr>
+        <th style="width:70px">Ordem</th>
+        <th class="n" style="width:220px">Valor</th>
+        <th style="width:220px">Vencimento</th>
+        <th style="width:52px"></th>
+      </tr></thead>
+      <tbody>
+      {% for p in parcelas %}
+        <tr>
+          <td class="fraco">{{ loop.index }}</td>
+          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="valor" 
+                     value="{{ p.valor }}"></td>
+          <td><input type="date" name="vencimento" value="{{ p.vencimento or '' }}"></td>
+          <td><button type="button" class="apagar" title="Remover a parcela"
+                      aria-label="Remover a parcela">&times;</button></td>
+        </tr>
+      {% else %}
+        <tr>
+          <td class="fraco">1</td>
+          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="valor"  value=""></td>
+          <td><input type="date" name="vencimento" value=""></td>
+          <td><button type="button" class="apagar" aria-label="Remover a parcela">&times;</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="soma certa" id="soma-terreno">
+    <span>Total pago em dinheiro</span>
+    <span class="valor">R$ {{ total|moeda(2) }}</span>
+  </div>
+
+  <div class="acoes" style="margin-top:1.4rem">
+    <button type="button" id="mais-uma">Adicionar parcela</button>
+    <button class="principal" type="submit" {{ 'disabled' if congelado }}>Salvar parcelas</button>
+    <a class="botao" href="/empreendimento/{{ emp.id }}/dados">Voltar aos dados</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const corpo = document.querySelector("#tabela-terreno tbody");
+  const soma = document.querySelector("#soma-terreno .valor");
+  function renumera() {
+    [...corpo.children].forEach((tr, i) => tr.firstElementChild.textContent = i + 1);
+    const t = [...corpo.querySelectorAll('[name="valor"]')]
+        .reduce((a, i) => a + (parseFloat(String(i.value).replace(",", ".")) || 0), 0);
+    soma.textContent = "R$ " + t.toLocaleString("pt-BR", {minimumFractionDigits: 2,
+                                                          maximumFractionDigits: 2});
+  }
+  document.getElementById("mais-uma").addEventListener("click", () => {
+    const nova = corpo.lastElementChild.cloneNode(true);
+    nova.querySelector('[name="valor"]').value = "";
+    nova.querySelector('[name="vencimento"]').value = "";
+    corpo.appendChild(nova); renumera();
+    nova.querySelector('[name="valor"]').focus();
+  });
+  corpo.addEventListener("click", e => {
+    if (!e.target.closest(".apagar")) return;
+    if (corpo.children.length > 1) e.target.closest("tr").remove();
+    renumera();
+  });
+  corpo.addEventListener("input", renumera);
+})();
+</script>
+{% endblock %}

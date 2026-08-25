@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block titulo %}Obra — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Obra</h1>
+<p class="sub">
+  Duas coisas separadas, e confundi-las é caro: <strong>quanto</strong> custa a
+  obra e <strong>quando</strong> esse custo é desembolsado. O total vem do
+  orçamento; a distribuição no tempo vem da curva física. Curva errada não muda
+  o lucro — muda o caixa, e é o tipo de erro que só aparece quando falta dinheiro.
+</p>
+
+{% include "_cabeca_lista.html" %}
+
+{% if not vigente %}
+<div class="aviso"><span><b>Este empreendimento não tem orçamento cadastrado.</b>
+  Sem custo raso não há resultado — o estudo inteiro depende dele.</span></div>
+{% else %}
+
+<form method="post" action="/empreendimento/{{ emp.id }}/dados/obra/salvar"
+      class="formulario">
+  <input type="hidden" name="orcamento_id" value="{{ vigente.id }}">
+
+  <section class="grupo">
+    <h3>Orçamento vigente</h3>
+    <p class="nota-grupo">
+      {{ orcamentos|length }} versão(ões) cadastrada(s). A vigente é a que o motor
+      usa; as outras ficam guardadas para comparação.
+    </p>
+    <div class="linha-campos">
+      <label class="campo"><span class="rot">Versão</span>
+        <input type="text" name="versao" value="{{ vigente.versao }}"></label>
+      <label class="campo numerico"><span class="rot">Custo raso total <span class="fraco">R$</span></span>
+        <input type="text" inputmode="decimal" autocomplete="off" name="custo_raso"  value="{{ vigente.custo_raso }}"></label>
+      <label class="campo"><span class="rot">Data-base</span>
+        <input type="date" value="{{ vigente.data_base }}" disabled></label>
+      <label class="campo"><span class="rot">Índice de reajuste</span>
+        <input type="text" value="{{ vigente.indice_reajuste or '—' }}" disabled></label>
+    </div>
+    <p class="legenda-tab">
+      Sobre a área privativa de {{ emp.area_privativa|moeda(0) }} m², esse custo dá
+      <b class="mono">R$ {{ (vigente.custo_raso|float / emp.area_privativa|float)|moeda(0) }}</b>
+      por m² — o número que se compara entre empreendimentos.
+    </p>
+  </section>
+
+  <section class="grupo">
+    <h3>Curva física</h3>
+    <p class="nota-grupo">
+      Quanto por cento da obra é executado em cada mês. A soma tem de dar
+      exatamente 100% — a trava é do banco, porque uma curva que soma 95%
+      deixaria a obra 5% mais barata sem ninguém ter negociado nada.
+      {% if itens_eap > 1 %}
+      Esta é a curva <b>agregada</b>: o orçamento tem {{ itens_eap }} itens de
+      EAP, cada um com o seu cronograma, e o desembolso do mês é a soma
+      ponderada pelo peso de cada item.
+      {% endif %}
+    </p>
+
+    {% if itens_eap > 1 %}
+    <div class="aviso"><span>
+      <b>Editar aqui apaga o detalhamento.</b> A curva agregada não sabe
+      reconstruir os {{ itens_eap }} itens de onde veio — gravar troca a EAP
+      detalhada por um item único. Para mudar só um item, o caminho é a
+      importação do cronograma.
+      <label style="display:flex; gap:.5rem; align-items:center; margin-top:.7rem">
+        <input type="checkbox" name="substituir_eap" value="1">
+        <span>Entendi: substituir a EAP detalhada por um item único</span>
+      </label>
+    </span></div>
+    {% endif %}
+
+    <div class="rolagem" style="max-height:420px">
+      <table class="editavel" id="tabela-curva">
+        <thead><tr>
+          <th style="width:200px">Mês</th>
+          <th class="n" style="width:170px">% do custo</th>
+          <th style="width:52px"></th>
+        </tr></thead>
+        <tbody>
+        {% for c in curva %}
+          <tr>
+            <td><input type="date" name="mes" value="{{ c.mes }}"></td>
+            <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="perc" 
+                       value="{{ '%.8f'|format(c.perc_fisico|float) }}"></td>
+            <td><button type="button" class="apagar" aria-label="Remover o mês">&times;</button></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="soma {{ 'certa' if (soma_curva - 1)|abs < 1e-6 else 'errada' }}" id="soma-curva">
+      <span>Soma da curva</span>
+      <span class="valor">{{ (soma_curva * 100)|round(4) }}%</span>
+    </div>
+
+    <div class="acoes" style="margin-top:1.2rem">
+      <button type="button" id="mais-um">Adicionar mês</button>
+      <button class="principal" type="submit" name="acao" value="salvar">Salvar orçamento e curva</button>
+    </div>
+  </section>
+</form>
+
+<form method="post" action="/empreendimento/{{ emp.id }}/dados/obra/salvar"
+      class="formulario" style="margin-top:2rem">
+  <input type="hidden" name="orcamento_id" value="{{ vigente.id }}">
+  <input type="hidden" name="custo_raso" value="{{ vigente.custo_raso }}">
+  <input type="hidden" name="versao" value="{{ vigente.versao }}">
+  <section class="grupo">
+    <h3>Gerar a curva por formato</h3>
+    <p class="nota-grupo">
+      Quando ainda não existe cronograma físico-financeiro detalhado. Substitui a
+      curva inteira acima — o custo total não muda.
+    </p>
+    <div class="linha-campos">
+      <label class="campo"><span class="rot">Início da obra</span>
+        <input type="date" name="inicio_obra"
+               value="{{ curva[0].mes if curva else emp.data_lancamento }}"></label>
+      <label class="campo numerico"><span class="rot">Duração <span class="fraco">meses</span></span>
+        <input type="text" inputmode="numeric" autocomplete="off" name="meses_obra"  min="1"
+               value="{{ curva|length if curva else 36 }}"></label>
+      <label class="campo"><span class="rot">Formato</span>
+        <select name="formato_curva">
+          {% for k, rot in formatos.items() %}
+          <option value="{{ k }}">{{ rot }}</option>
+          {% endfor %}
+        </select></label>
+    </div>
+    <div class="acoes" style="margin-top:1.2rem">
+      <button type="submit" name="acao" value="gerar">Gerar e substituir a curva</button>
+    </div>
+  </section>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const corpo = document.querySelector("#tabela-curva tbody");
+  if (!corpo) return;
+  const caixa = document.getElementById("soma-curva");
+  const valor = caixa.querySelector(".valor");
+  function conta() {
+    const t = [...corpo.querySelectorAll('[name="perc"]')]
+        .reduce((a, i) => a + (parseFloat(String(i.value).replace(",", ".")) || 0), 0);
+    valor.textContent = (t * 100).toFixed(4).replace(".", ",") + "%";
+    const certa = Math.abs(t - 1) < 1e-6;
+    caixa.classList.toggle("certa", certa);
+    caixa.classList.toggle("errada", !certa);
+    caixa.firstElementChild.textContent = certa ? "Soma da curva — fecha 100%"
+                                                : "Soma da curva — precisa fechar 100%";
+  }
+  document.getElementById("mais-um").addEventListener("click", () => {
+    const nova = corpo.lastElementChild.cloneNode(true);
+    nova.querySelector('[name="perc"]').value = "";
+    corpo.appendChild(nova); conta();
+    nova.querySelector('[name="mes"]').focus();
+  });
+  corpo.addEventListener("click", e => {
+    if (!e.target.closest(".apagar")) return;
+    if (corpo.children.length > 1) e.target.closest("tr").remove();
+    conta();
+  });
+  corpo.addEventListener("input", conta);
+  conta();
+})();
+</script>
+{% endblock %}
