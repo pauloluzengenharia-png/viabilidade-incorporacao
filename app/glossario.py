@@ -111,6 +111,12 @@ for, porque uma tabela que soma 97% inventa um desconto invisível de 3%.""", [
         como="Preço bruto por metro quadrado privativo — antes de descontar a comissão. O cenário realista costuma usar o preço de tabela já cadastrado unidade a unidade; o otimista e o pessimista usam este número aplicado à área.",
         exemplo="18.228,66"),
 
+    Verbete("unidades", "Número de unidades", "unidades",
+        o_que="Quantas unidades o empreendimento tem à venda. Junto com a área privativa total, define a área média de cada uma.",
+        de_onde="Quadro de áreas do projeto.",
+        como="Conte só o que entra no VGV. No cadastro guiado, o sistema cria essas unidades com a área média e o preço de tabela — quando o cadastro real chegar do Sienge, a importação substitui.",
+        exemplo="201"),
+
     Verbete("comissao", "Comissão sobre vendas", "% do bruto",
         o_que="O que fica com quem vendeu. Sai de dentro do preço: o cliente paga 100, a corretora fica com a comissão e a SPE recebe o resto.",
         de_onde="Contrato com a imobiliária.",
@@ -187,6 +193,18 @@ diferentes, uma por cenário.""", [
         como="Uma linha por mês, do lançamento até esgotar o estoque. A soma das unidades do plano precisa fechar com o estoque disponível — se sobrar unidade sem mês de venda, ela nunca entra no fluxo.",
         cuidado="Vender mais rápido melhora o caixa, mas não melhora o lucro na mesma proporção: o preço é o mesmo e a comissão também. Se o cenário otimista mostra lucro muito maior só por causa da velocidade, provavelmente o preço também foi mexido junto."),
 
+    Verbete("unidades_por_mes", "Unidades por mês", "unidades/mês",
+        o_que="A velocidade de vendas assumida: quantas unidades saem do estoque por mês, do início das vendas até esgotar.",
+        de_onde="Decisão comercial, calibrada pela velocidade já observada em empreendimentos parecidos.",
+        como="Aceita fração — 2,5 significa cinco unidades a cada dois meses. O sistema distribui as unidades mês a mês até o estoque acabar.",
+        cuidado="Vender mais rápido melhora o caixa mas quase não melhora o lucro: o preço é o mesmo e a comissão também. Se um cenário mostra lucro muito maior só por causa da velocidade, o preço foi mexido junto.",
+        exemplo="4"),
+
+    Verbete("inicio_vendas", "Início das vendas", "data",
+        o_que="Quando a primeira unidade do plano é vendida.",
+        de_onde="Decisão comercial.",
+        como="Deixe vazio para usar a data de lançamento."),
+
     Verbete("tipo_venda", "Tipo da venda", "normal ou investidor",
         o_que="Distingue a venda de tabela da venda em bloco para investidor, que tem preço próprio.",
         de_onde="Decisão comercial.",
@@ -215,6 +233,18 @@ despercebido porque o total continua certo.""", [
         de_onde="Calculado pelo sistema.",
         como="Não se digita — sai de custo raso ÷ área privativa.",
         exemplo="9.696"),
+
+    Verbete("inicio_obra", "Início da obra", "data",
+        o_que="O primeiro mês em que há desembolso de obra.",
+        de_onde="Cronograma.",
+        como="Deixe vazio para usar a data de lançamento. Adiantar o início da obra em relação às vendas piora a exposição, porque o dinheiro sai antes de entrar."),
+
+    Verbete("meses_obra", "Duração da obra", "meses",
+        o_que="Quantos meses a obra leva do início ao habite-se.",
+        de_onde="Cronograma.",
+        como="A curva escolhida se distribui exatamente nesse número de meses.",
+        cuidado="Esticar a obra dilui o desembolso e alivia a exposição no papel — mas atrasa a entrega, e com ela o repasse, que é a maior entrada do estudo. O efeito líquido quase nunca é o que se espera; vale rodar os dois.",
+        exemplo="40"),
 
     Verbete("curva_fisica", "Curva física da obra", "% por mês",
         o_que="Quanto por cento da obra é executado em cada mês. É ela que espalha o custo raso no tempo.",
