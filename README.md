@@ -166,10 +166,45 @@ Uma diferença é só de arredondamento e não vale correção: a planilha calcu
 "outras despesas administrativas" com um percentual de sete casas, resultado de
 uma divisão feita uma vez. O sistema usa o percentual redondo.
 
+## Acesso
+
+O sistema abre numa **tela de login** (`/entrar`). Quem acerta usuário e senha
+recebe um cookie de sessão válido por 12 horas; qualquer outra rota redireciona
+para o login enquanto esse cookie não existir. As rotas `/api/*` respondem 401
+seco, sem redirecionar — elas são consumidas por programa, não por navegador.
+
+| variável | o que é |
+|---|---|
+| `VIAB_SENHA` | senha de acesso. **Não mora no repositório** — é definida no painel do Render, em Environment |
+| `VIAB_USUARIO` | usuário; o padrão é `mmi` |
+| `VIAB_SEGREDO` | opcional; entra na derivação da chave de assinatura |
+
+Três decisões que valem explicar:
+
+- **Fail-closed.** Sem `VIAB_SENHA` no ambiente o sistema responde 503 em tudo
+  menos no health check, com uma página explicando como configurar. Um sistema
+  que guarda a viabilidade e o incorrido de uma SPE não pode ficar aberto por
+  esquecimento de variável de ambiente.
+- **A senha não vira cookie.** O cookie carrega `{usuário, validade}` assinados
+  com HMAC-SHA256 sobre uma chave derivada da senha. Quem interceptar o cookie
+  não descobre a senha — e **trocar a senha no painel invalida todas as sessões
+  abertas**, porque a chave muda junto.
+- **Comparação em tempo constante.** `hmac.compare_digest` nos dois campos, para
+  o tempo de resposta não entregar o tamanho da senha.
+
+O cookie é `HttpOnly` (fora do alcance de JavaScript), `SameSite=Lax` (não viaja
+em requisição vinda de outro site) e `Secure` quando a conexão é HTTPS. O
+destino pós-login é validado contra *open redirect*: só caminhos que começam com
+uma única barra.
+
+Ainda é **uma credencial só para todo mundo**. Se virar multiusuário, o caminho
+é uma tabela de usuários com hash por linha — a estrutura de sessão já suporta,
+porque o cookie já carrega o usuário.
+
 ## O que ainda não existe
 
-- **Autenticação.** O sistema está aberto — antes de expor com dados reais,
-  colocar um login na frente.
+- **Usuários individuais.** Hoje é uma credencial só para todo mundo. Não há
+  registro de quem mexeu em qual premissa.
 - **Financiamento à produção.** O motor tem o bloco (`_linhas_financiamento`,
   liberação por evolução de obra, juros e amortização) e ele está desligado
   porque a Kiev tem limite zero. Falta a tela para cadastrar o contrato.

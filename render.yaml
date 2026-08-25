@@ -20,6 +20,12 @@ services:
           property: connectionString
       - key: PYTHON_VERSION
         value: "3.11.9"
+      # sem VIAB_SENHA o sistema sobe bloqueado, de proposito.
+      # Defina o valor no painel (Environment) — ele nao mora no repositorio.
+      - key: VIAB_USUARIO
+        value: mmi
+      - key: VIAB_SENHA
+        sync: false
 
 databases:
   - name: viabilidade-db

@@ -22,10 +22,16 @@ from .importadores.sienge import (ler_planilha, normalizar_contratos,
                                   normalizar_movimentos, normalizar_recebido,
                                   normalizar_receber, normalizar_unidades)
 from .repositorio import carregar_entradas
+from .seguranca import (COOKIE, DURACAO, conferir_senha, credenciais_configuradas,
+                        criar_sessao, exigir_login)
+from .seguranca import registrar as registrar_seguranca
 from .servico import calcular, rodar_e_persistir, visao_viabilidade
 
 AQUI = pathlib.Path(__file__).resolve().parent
-app = FastAPI(title="Viabilidade de Incorporação", docs_url="/api/docs")
+# a dependência vale para TODAS as rotas; `exigir_login` libera só o health check
+app = FastAPI(title="Viabilidade de Incorporação", docs_url="/api/docs",
+              dependencies=[Depends(exigir_login)])
+registrar_seguranca(app)
 app.mount("/static", StaticFiles(directory=AQUI / "web" / "static"), name="static")
 templates = Jinja2Templates(directory=str(AQUI / "web" / "templates"))
 
@@ -62,6 +68,41 @@ templates.env.filters.update(moeda=moeda, milhoes=milhoes,
 @app.on_event("startup")
 def preparar():
     aplicar_migrations()
+
+
+# ================================================================ login
+@app.get("/entrar", response_class=HTMLResponse)
+def tela_entrar(request: Request, de: str = "/"):
+    if credenciais_configuradas() is None:
+        raise HTTPException(503, "sem senha configurada")
+    return templates.TemplateResponse(request, "entrar.html", {"de": de, "erro": None})
+
+
+@app.post("/entrar")
+def entrar(request: Request, usuario: str = Form(...), senha: str = Form(...),
+           de: str = Form("/")):
+    if not conferir_senha(usuario, senha):
+        # a mensagem nao diz se o errado foi o usuario ou a senha
+        return templates.TemplateResponse(
+            request, "entrar.html",
+            {"de": de, "usuario": usuario, "erro": "Usuário ou senha não conferem."},
+            status_code=401)
+
+    destino = de if de.startswith("/") and not de.startswith("//") else "/"
+    resposta = RedirectResponse(destino, status_code=303)
+    resposta.set_cookie(
+        COOKIE, criar_sessao(usuario), max_age=DURACAO,
+        httponly=True,                      # fora do alcance de JavaScript
+        samesite="lax",                     # nao viaja em requisicao de outro site
+        secure=request.url.scheme == "https")
+    return resposta
+
+
+@app.get("/sair")
+def sair():
+    resposta = RedirectResponse("/entrar", status_code=303)
+    resposta.delete_cookie(COOKIE)
+    return resposta
 
 
 # ================================================================ telas
