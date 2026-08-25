@@ -5,10 +5,19 @@
   {% set v = ajuda(nome) %}
   <div class="campo-bloco">
     <label class="campo {{ 'numerico' if tipo == 'number' }}">
-      <span class="rot">{{ rotulo }}{% if sufixo %} <span class="fraco">{{ sufixo }}</span>{% endif %}</span>
-      <input type="{{ tipo }}" name="{{ nome }}" value="{{ valor }}"
-             {% if tipo == 'number' %}step="any"{% endif %}
-             {{ 'required' if obrigatorio }}>
+      <span class="rot">{{ rotulo }}{% if sufixo and sufixo != 'R$' %} <span class="fraco">{{ sufixo }}</span>{% endif %}</span>
+      {#- Numérico é texto com teclado decimal: o input[type=number] do
+          navegador recusa vírgula quando o idioma dele é outro, e a tela pede
+          vírgula. Campos em reais ganham o R$ colado à esquerda. -#}
+      {% set eh_moeda = sufixo in ('R$', 'R$/m²') %}
+      <span class="com-adorno {{ 'tem-adorno' if eh_moeda }}">
+        {%- if eh_moeda %}<span class="adorno" aria-hidden="true">R$</span>{% endif -%}
+        <input type="{{ 'date' if tipo == 'date' else 'text' }}" name="{{ nome }}"
+               value="{{ valor }}"
+               {% if eh_moeda %}data-formato="moeda"{% endif %}
+               {% if tipo == 'number' %}inputmode="decimal" autocomplete="off"{% endif %}
+               {{ 'required' if obrigatorio }}>
+      </span>
     </label>
     {% if v %}
     <details class="ajuda so-marca">
@@ -231,6 +240,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "_dinheiro.html" %}
 <script>
 // A soma da tabela de venda aparece enquanto se digita. A trava de verdade está
 // no banco; isto só evita descobrir o erro depois de rolar a página inteira.

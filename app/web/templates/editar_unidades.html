@@ -54,8 +54,11 @@
         </td>
         <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="area_privativa" 
                    value="{{ u.area_privativa }}" form="u{{ u.id }}"></td>
-        <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="preco_bruto" 
-                   value="{{ u.preco_bruto or '' }}" form="u{{ u.id }}"></td>
+        <td class="numerico"><span class="com-adorno tem-adorno">
+          <span class="adorno" aria-hidden="true">R$</span>
+          <input type="text" inputmode="decimal" autocomplete="off" name="preco_bruto"
+                 data-formato="moeda" value="{{ u.preco_bruto|dinheiro }}"
+                 form="u{{ u.id }}"></span></td>
         <td><select name="situacao" form="u{{ u.id }}">
           {% for sit in situacoes %}
           <option value="{{ sit }}" {{ 'selected' if u.situacao == sit }}>{{ sit }}</option>
@@ -82,4 +85,8 @@
   exige o motivo escrito ao lado. O preço é versionado: gravar um novo não apaga
   o anterior, ele fica no histórico.
 </p>
+{% endblock %}
+
+{% block scripts %}
+{% include "_dinheiro.html" %}
 {% endblock %}

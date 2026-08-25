@@ -610,3 +610,13 @@ table.editavel .apagar:hover{color:var(--realizado); background:var(--realizado-
 .evento .de-para .antes{color:var(--tinta-3); text-decoration:line-through}
 .evento .de-para .seta{color:var(--tinta-3); margin:0 .45rem}
 .evento .de-para .depois{color:var(--tinta); font-weight:600}
+
+/* =====================================================================
+   campo com adorno (R$)
+   ===================================================================== */
+.com-adorno{position:relative; display:block}
+.com-adorno .adorno{position:absolute; left:.7rem; top:50%;
+  transform:translateY(-50%); font-size:.84rem; color:var(--tinta-3);
+  pointer-events:none; font-family:"Inter",sans-serif}
+.com-adorno.tem-adorno input{padding-left:2.2rem}
+.com-adorno input{width:100%}

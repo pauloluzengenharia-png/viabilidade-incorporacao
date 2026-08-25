@@ -32,8 +32,11 @@
     <div class="linha-campos">
       <label class="campo"><span class="rot">Versão</span>
         <input type="text" name="versao" value="{{ vigente.versao }}"></label>
-      <label class="campo numerico"><span class="rot">Custo raso total <span class="fraco">R$</span></span>
-        <input type="text" inputmode="decimal" autocomplete="off" name="custo_raso"  value="{{ vigente.custo_raso }}"></label>
+      <label class="campo numerico"><span class="rot">Custo raso total</span>
+        <span class="com-adorno tem-adorno">
+          <span class="adorno" aria-hidden="true">R$</span>
+          <input type="text" inputmode="decimal" autocomplete="off" name="custo_raso"
+                 data-formato="moeda" value="{{ vigente.custo_raso|dinheiro }}"></span></label>
       <label class="campo"><span class="rot">Data-base</span>
         <input type="date" value="{{ vigente.data_base }}" disabled></label>
       <label class="campo"><span class="rot">Índice de reajuste</span>
@@ -41,7 +44,7 @@
     </div>
     <p class="legenda-tab">
       Sobre a área privativa de {{ emp.area_privativa|moeda(0) }} m², esse custo dá
-      <b class="mono">R$ {{ (vigente.custo_raso|float / emp.area_privativa|float)|moeda(0) }}</b>
+      <b class="mono">R$ {{ (vigente.custo_raso|float / emp.area_privativa|float)|dinheiro }}</b>
       por m² — o número que se compara entre empreendimentos.
     </p>
   </section>
@@ -138,6 +141,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "_dinheiro.html" %}
 <script>
 (function () {
   const corpo = document.querySelector("#tabela-curva tbody");

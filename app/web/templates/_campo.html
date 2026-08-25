@@ -1,7 +1,9 @@
 {% macro campo(c, valor) %}
   <div class="campo-bloco">
     <label class="campo {{ 'numerico' if c.tipo in ('numero','inteiro') }}">
-      <span class="rot">{{ c.rotulo }}{% if c.sufixo %} <span class="fraco">{{ c.sufixo }}</span>{% endif %}</span>
+      {#- Um sufixo que diz só "R$" seria repetir o adorno do campo; "R$/m²"
+          fica, porque o "/m²" é informação a mais. -#}
+      <span class="rot">{{ c.rotulo }}{% if c.sufixo and c.sufixo != 'R$' %} <span class="fraco">{{ c.sufixo }}</span>{% endif %}</span>
       {%- if c.tipo == 'escolha' %}
       <select name="{{ c.chave }}">
         {% for o in c.opcoes %}
@@ -11,13 +13,16 @@
       {%- elif c.tipo == 'data' %}
       <input type="date" name="{{ c.chave }}" value="{{ valor or '' }}">
       {%- else %}
-      {#- Campo numérico é texto com teclado decimal, não input[type=number]:
-          o número do navegador recusa vírgula quando o idioma dele é outro, e
-          o texto da tela pede vírgula. O servidor aceita os dois jeitos. -#}
-      <input type="text" name="{{ c.chave }}"
-             value="{{ valor if valor is not none else '' }}"
-             {% if c.tipo in ('numero','inteiro') %}inputmode="decimal"
-             autocomplete="off"{% endif %}>
+      {#- Campo numérico é texto com teclado decimal, não input[type=number]: o
+          número do navegador recusa vírgula quando o idioma dele é outro, e a
+          tela pede vírgula. O servidor aceita os dois jeitos, com ou sem R$. -#}
+      <span class="com-adorno {{ 'tem-adorno' if c.adorno }}">
+        {%- if c.adorno %}<span class="adorno" aria-hidden="true">{{ c.adorno }}</span>{% endif -%}
+        <input type="text" name="{{ c.chave }}" value="{{ c.exibir(valor) }}"
+               {% if c.formato == 'moeda' %}data-formato="moeda"{% endif %}
+               {% if c.tipo in ('numero','inteiro') %}inputmode="decimal"
+               autocomplete="off"{% endif %}>
+      </span>
       {%- endif %}
     </label>
     {% set v = c.verbete %}

@@ -333,6 +333,23 @@ Pelo mesmo motivo os campos numéricos são `type="text"` com `inputmode="decima
 em vez de `type="number"`: o campo numérico do navegador recusa vírgula quando o
 idioma dele é outro, e o texto da tela pede vírgula.
 
+### Dinheiro é escrito como dinheiro
+
+Campo em reais tem `R$` colado à esquerda e o valor em formato brasileiro —
+ponto de milhar, vírgula decimal, **no mínimo** duas casas. Ao sair do campo o
+valor é reescrito assim; enquanto se digita ele não é tocado, porque reformatar
+a cada tecla move o cursor.
+
+O mínimo é duas casas, não o máximo, e a diferença importa: o preço por m² da
+Kiev é `18.228,6645`, com quatro casas, porque veio de uma divisão. Exibir com
+duas faria a próxima gravação arredondar de verdade — a tela passaria a mudar o
+dado só de ser aberta. Um teste guarda isso.
+
+Percentual **não** ganha adorno: o campo é digitado em fração (`0,06` para 6%), e
+um `%` encostado num campo escrito `0,06` leria como "zero vírgula zero seis por
+cento". O rótulo já diz "% do bruto", que é a informação certa sem a leitura
+errada.
+
 ## Histórico de alterações
 
 `alteracao` guarda valor anterior, valor novo, quem e quando, para toda edição

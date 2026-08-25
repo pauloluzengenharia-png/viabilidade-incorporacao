@@ -1,0 +1,45 @@
+{# Reformatação de campos de dinheiro ao sair do campo.
+
+   Enquanto se digita, o campo não é tocado — reformatar a cada tecla move o
+   cursor e atrapalha. Ao sair, o valor volta escrito como dinheiro se escreve:
+   ponto de milhar, vírgula decimal, no mínimo duas casas. Nunca arredonda para
+   duas: o preço por m² da Kiev tem quatro casas porque veio de uma divisão, e
+   formatação não pode apagar dado. #}
+<script>
+(function () {
+  function paraNumero(bruto) {
+    let s = String(bruto).trim()
+      .replace(/R\$/g, "").replace(/%/g, "")
+      .replace(/\s| /g, "");
+    if (!s) return null;
+    const negativo = s.startsWith("-");
+    s = s.replace(/^[+-]/, "");
+    if (s.includes(",")) {
+      s = s.replace(/\./g, "").replace(",", ".");
+    } else if ((s.match(/\./g) || []).length > 1) {
+      s = s.replace(/\./g, "");
+    } else if (s.includes(".")) {
+      const [inteiro, fracao] = s.split(".");
+      if (fracao.length === 3 && inteiro.replace(/^0+/, "") !== "") s = inteiro + fracao;
+    }
+    const n = parseFloat(s);
+    if (Number.isNaN(n)) return null;
+    return negativo ? -n : n;
+  }
+
+  function comoDinheiro(n) {
+    const cheio = Math.abs(n).toFixed(8).replace(/0+$/, "");
+    const usadas = (cheio.split(".")[1] || "").length;
+    const casas = Math.max(2, Math.min(8, usadas));
+    return n.toLocaleString("pt-BR", {minimumFractionDigits: casas,
+                                      maximumFractionDigits: casas});
+  }
+
+  document.addEventListener("blur", function (e) {
+    const alvo = e.target;
+    if (!alvo.matches || !alvo.matches('input[data-formato="moeda"]')) return;
+    const n = paraNumero(alvo.value);
+    alvo.value = n === null ? "" : comoDinheiro(n);
+  }, true);
+})();
+</script>

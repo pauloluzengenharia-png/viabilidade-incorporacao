@@ -28,8 +28,10 @@
       {% for p in parcelas %}
         <tr>
           <td class="fraco">{{ loop.index }}</td>
-          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="valor" 
-                     value="{{ p.valor }}"></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor"
+                   data-formato="moeda" value="{{ p.valor|dinheiro }}"></span></td>
           <td><input type="date" name="vencimento" value="{{ p.vencimento or '' }}"></td>
           <td><button type="button" class="apagar" title="Remover a parcela"
                       aria-label="Remover a parcela">&times;</button></td>
@@ -37,7 +39,10 @@
       {% else %}
         <tr>
           <td class="fraco">1</td>
-          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="valor"  value=""></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor"
+                   data-formato="moeda" value=""></span></td>
           <td><input type="date" name="vencimento" value=""></td>
           <td><button type="button" class="apagar" aria-label="Remover a parcela">&times;</button></td>
         </tr>
@@ -48,7 +53,7 @@
 
   <div class="soma certa" id="soma-terreno">
     <span>Total pago em dinheiro</span>
-    <span class="valor">R$ {{ total|moeda(2) }}</span>
+    <span class="valor">R$ {{ total|dinheiro }}</span>
   </div>
 
   <div class="acoes" style="margin-top:1.4rem">
@@ -60,6 +65,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "_dinheiro.html" %}
 <script>
 (function () {
   const corpo = document.querySelector("#tabela-terreno tbody");

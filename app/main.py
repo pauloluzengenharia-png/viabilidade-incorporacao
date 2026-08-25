@@ -67,7 +67,12 @@ def mes_curto(d):
     return f"{d.month:02d}/{d.year}"
 
 
-templates.env.filters.update(moeda=moeda, milhoes=milhoes,
+def dinheiro(v):
+    """R$ com no mínimo duas casas e as que o valor tiver além disso."""
+    return edicao.moeda(v)
+
+
+templates.env.filters.update(moeda=moeda, milhoes=milhoes, dinheiro=dinheiro,
                              percentual=percentual, mes=mes_curto)
 # a explicação de cada linha mora no glossário; o template só a pendura
 def rotulo_do_campo(chave: str) -> str:

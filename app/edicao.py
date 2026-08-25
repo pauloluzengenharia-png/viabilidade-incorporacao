@@ -53,7 +53,9 @@ def num(v: Any, padrao: float = 0.0) -> float:
     """
     if v is None:
         return padrao
-    s = str(v).strip().replace(" ", "").replace("\u00a0", "")
+    s = (str(v).strip()
+         .replace("R$", "").replace("%", "")
+         .replace(" ", "").replace("\u00a0", ""))
     if not s:
         return padrao
     negativo = s.startswith("-")
@@ -103,6 +105,51 @@ def como_texto(v: Any) -> Optional[str]:
     return str(v)
 
 
+def moeda(v: Any, minimo: int = 2) -> str:
+    """
+    `3704512.5` vira `3.704.512,50`; `18228.6645` vira `18.228,6645`.
+
+    O mínimo é duas casas — dinheiro escrito com uma casa parece truncado. Mas o
+    máximo é quantas o valor tiver: arredondar para duas na exibição faria a
+    próxima gravação arredondar de verdade, e o preço por m² da Kiev tem quatro
+    casas porque veio de uma divisão. Formatação não pode apagar dado.
+    """
+    if v is None or v == "":
+        return ""
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    casas = max(minimo, _casas_significativas(n))
+    inteiro_, _, fracao = f"{abs(n):.{casas}f}".partition(".")
+    grupos = []
+    while len(inteiro_) > 3:
+        grupos.insert(0, inteiro_[-3:])
+        inteiro_ = inteiro_[:-3]
+    grupos.insert(0, inteiro_)
+    return ("-" if n < 0 else "") + ".".join(grupos) + "," + fracao
+
+
+def _casas_significativas(n: float, teto: int = 8) -> int:
+    """Quantas casas o número de fato usa, até o teto."""
+    texto_ = f"{abs(n):.{teto}f}".rstrip("0")
+    fracao = texto_.partition(".")[2]
+    return len(fracao)
+
+
+def percentual(v: Any) -> str:
+    """`0.045` continua `0,045` — a fração é a unidade em que o campo é digitado."""
+    if v is None or v == "":
+        return ""
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if n == int(n):
+        return str(int(n))
+    return f"{n:.8f}".rstrip("0").replace(".", ",")
+
+
 # =====================================================================
 # definição de um módulo
 # =====================================================================
@@ -114,6 +161,43 @@ class Campo:
     sufixo: str = ""              # o que aparece cinza ao lado do rótulo
     opcoes: tuple = ()            # para tipo 'escolha'
     ajuda: str = ""               # chave do glossário; vazio usa `chave`
+    #: moeda | percentual | ""  — decide o adorno e a formatação do campo.
+    #: Deduzido do sufixo quando não vem explícito, para a definição do módulo
+    #: não repetir "R$" duas vezes.
+    formato: str = ""
+
+    def __post_init__(self):
+        if not self.formato and self.tipo in ("numero", "inteiro"):
+            if "R$" in self.sufixo:
+                self.formato = "moeda"
+            elif "%" in self.sufixo:
+                self.formato = "percentual"
+
+    @property
+    def adorno(self) -> str:
+        """
+        Só o `R$`, colado à esquerda do campo.
+
+        Percentual **não** ganha adorno de propósito: o campo é digitado em
+        fração — `0,06` para 6% — e um `%` encostado num campo escrito `0,06`
+        leria como "zero vírgula zero seis por cento". O rótulo já diz
+        "% do bruto", que é a informação certa sem a leitura errada.
+        """
+        return "R$" if self.formato == "moeda" else ""
+
+    def exibir(self, valor: Any) -> str:
+        if valor is None:
+            return ""
+        if self.formato == "moeda":
+            return moeda(valor)
+        if self.formato == "percentual":
+            return percentual(valor)
+        if self.tipo == "inteiro":
+            try:
+                return str(int(float(valor)))
+            except (TypeError, ValueError):
+                return str(valor)
+        return str(valor)
 
     def ler(self, bruto: Any) -> Any:
         if self.tipo == "numero":
