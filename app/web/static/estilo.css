@@ -15,9 +15,11 @@
    faixa de luminosidade, piso de croma, separação sob protanopia/deuteranopia
    e contraste contra a superfície, nos dois modos.
 
-   Os tokens são definidos três vezes — claro, escuro por preferência do
-   sistema e escuro por escolha explícita. Nenhuma cor vive só dentro de um
-   bloco de media query.
+   O tema claro é o padrão, e não o que o sistema operacional pedir. Num
+   aplicativo de tabela financeira, fundo preto com números laranja lê como
+   terminal antigo, não como documento — e o que se lê aqui é documento. O
+   escuro continua existindo, mas como escolha explícita no cabeçalho, guardada
+   entre visitas.
    ===================================================================== */
 
 :root{
@@ -62,33 +64,6 @@
   --largura:1240px;
 }
 
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --fundo:#0A0A0A;
-    --superficie:#121212;
-    --superficie-2:#1C1A18;
-    --tinta:#F4F4F4;
-    --tinta-2:#A0A0A0;
-    --tinta-3:#918C85;
-    --fio:#262421;
-    --fio-forte:#3A3733;
-    --acento:#E0D0BF;
-    --acento-tinta:#0A0A0A;
-    --areia-funda:#E0D0BF;
-    --areia-fraca:#E0D0BF1F;
-    --premissa:#2E93BE;
-    --premissa-fraco:#2E93BE1F;
-    --realizado:#D4764A;
-    --realizado-fraco:#D4764A1F;
-    --entrada:#2E93BE;
-    --saida:#D4764A;
-    --negativo:#D4764A;
-    --ok:#7FB08C;
-    --alerta:#D2A44E;
-    --alerta-fraco:#D2A44E1F;
-    --grade:#FFFFFF12;
-  }
-}
 :root[data-theme="dark"]{
   --fundo:#0A0A0A;
   --superficie:#121212;
@@ -144,29 +119,45 @@ code{font-family:"Inter",ui-monospace,monospace; font-size:.92em;
 /* =====================================================================
    cabeçalho
    ===================================================================== */
+/* Cabeçalho e abas grudam juntos, como uma peça só: separados, cada um com seu
+   `top`, qualquer mudança de altura do primeiro abre uma fresta no segundo. */
+.fixo{position:sticky; top:0; z-index:30}
 header.topo{background:var(--preto); color:var(--offwhite)}
-.faixa{max-width:var(--largura); margin:0 auto; padding:1.1rem 1.6rem;
-  display:flex; align-items:center; gap:1.4rem; flex-wrap:wrap}
+.faixa{max-width:var(--largura); margin:0 auto; padding:.85rem 1.6rem;
+  display:flex; align-items:center; gap:1.2rem; flex-wrap:wrap}
 .marca{display:flex; align-items:center; gap:.85rem; text-decoration:none;
   color:var(--areia)}
-.marca svg{height:19px; width:auto; display:block; color:var(--areia)}
-.marca .divisa{width:1px; height:20px; background:#3A3733}
-.marca span{font-size:.82rem; font-weight:400; color:var(--cinza);
+.marca svg{height:17px; width:auto; display:block; color:var(--areia)}
+.marca .divisa{width:1px; height:18px; background:#3A3733}
+.marca span{font-size:.8rem; font-weight:400; color:var(--cinza);
   letter-spacing:.01em; white-space:nowrap}
-.topo .rotulo{color:var(--cinza)}
-.topo .obra{font-size:.86rem; color:var(--areia); font-weight:500}
-.sair{font-size:.78rem; letter-spacing:.1em; text-transform:uppercase;
-  color:var(--cinza); text-decoration:none; font-weight:500}
+.topo .obra{font-size:.85rem; color:var(--areia); font-weight:500}
+.sair{font-size:.76rem; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--cinza); text-decoration:none; font-weight:500;
+  padding:.3rem .1rem}
 .sair:hover{color:var(--areia)}
 
-nav.abas{background:var(--preto); border-bottom:1px solid #1E1C1A}
-nav.abas .interno{max-width:var(--largura); margin:0 auto; padding:0 1.6rem;
-  display:flex; gap:.3rem; overflow-x:auto}
-nav.abas a{padding:.62rem 1rem 1rem; font-size:.9rem; font-weight:400;
-  text-decoration:none; color:var(--cinza); white-space:nowrap;
-  border-bottom:2px solid transparent; margin-bottom:-1px}
-nav.abas a:hover{color:var(--offwhite)}
-nav.abas a.ativa{color:var(--areia); border-bottom-color:var(--areia); font-weight:500}
+/* botão de tema: dois estados, um ícone, nenhuma explicação necessária */
+.tema{background:none; border:1px solid #2E2C29; color:var(--cinza);
+  width:30px; height:30px; padding:0; border-radius:50%;
+  display:grid; place-items:center; cursor:pointer; flex:none}
+.tema:hover{border-color:var(--areia); color:var(--areia); background:none}
+.tema svg{width:15px; height:15px; display:block}
+.tema .lua{display:none}
+:root[data-theme="dark"] .tema .sol{display:none}
+:root[data-theme="dark"] .tema .lua{display:block}
+
+/* As abas saem do preto e passam para o papel: duas faixas escuras empilhadas
+   é o que dava peso de painel de controle à tela inteira. */
+nav.abas{background:var(--superficie); border-bottom:1px solid var(--fio)}
+nav.abas .interno{max-width:var(--largura); margin:0 auto; padding:.5rem 1.6rem;
+  display:flex; gap:.25rem; overflow-x:auto; scrollbar-width:none}
+nav.abas .interno::-webkit-scrollbar{display:none}
+nav.abas a{padding:.42rem .95rem; font-size:.89rem; font-weight:500;
+  text-decoration:none; color:var(--tinta-2); white-space:nowrap;
+  border-radius:999px; transition:background .14s, color .14s}
+nav.abas a:hover{background:var(--superficie-2); color:var(--tinta)}
+nav.abas a.ativa{background:var(--acento); color:var(--acento-tinta)}
 
 /* =====================================================================
    página
@@ -209,22 +200,77 @@ p{margin:0 0 1rem}
 
 /* =====================================================================
    tabelas
+
+   O que fazia a tela parecer sistema antigo era a grade: linha vertical entre
+   toda coluna, linha horizontal entre toda conta, tudo do mesmo peso. Aqui não
+   há nenhuma linha vertical, os separadores horizontais só marcam a troca de
+   bloco, e cada valor carrega atrás de si uma barra proporcional — o olho lê o
+   tamanho antes de ler o algarismo.
    ===================================================================== */
 .rolagem{overflow-x:auto; border:1px solid var(--fio); border-radius:var(--raio);
   background:var(--superficie)}
-table{border-collapse:collapse; width:100%; font-size:.9rem}
-th,td{padding:.62rem .95rem; border-bottom:1px solid var(--fio); text-align:left}
-thead th{position:sticky; top:0; background:var(--superficie-2); font-size:.66rem;
-  font-weight:600; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--tinta-2); white-space:nowrap; z-index:1}
-tbody tr:last-child td{border-bottom:0}
+table{border-collapse:collapse; width:100%; font-size:.92rem}
+th,td{padding:.72rem 1rem; text-align:left; border:0}
+thead th{position:sticky; top:var(--altura-fixa, 104px); background:var(--superficie); font-size:.66rem;
+  font-weight:600; letter-spacing:.11em; text-transform:uppercase;
+  color:var(--tinta-3); white-space:nowrap; z-index:2;
+  border-bottom:1px solid var(--fio); padding-bottom:.6rem}
 tbody tr:hover td{background:var(--superficie-2)}
 td.n,th.n{text-align:right; white-space:nowrap}
-tr.total td{font-weight:600; background:var(--areia-fraca)}
-tr.total:hover td{background:var(--areia-fraca)}
 td.neg{color:var(--negativo)}
 td.fraco{color:var(--tinta-3)}
+
+/* a conta acompanha a rolagem horizontal: número sem nome não diz nada */
+th.conta,td.conta{position:sticky; left:0; background:var(--superficie); z-index:1;
+  min-width:250px}
+thead th.conta{z-index:3}
+tbody tr:hover td.conta{background:var(--superficie-2)}
+
+/* cabeça de bloco */
+tr.bloco td{padding:1.5rem 1rem .35rem; background:var(--superficie);
+  font-size:.66rem; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--tinta-3); border-top:1px solid var(--fio)}
+tr.bloco:first-child td{border-top:0; padding-top:.9rem}
+tr.bloco:hover td{background:var(--superficie)}
+
+/* subtotal e total */
+tr.total td{font-weight:600; background:var(--areia-fraca)}
+tr.total:hover td,tr.total:hover td.conta{background:var(--areia-fraca)}
+tr.total td.conta{background:var(--areia-fraca)}
+tr.fecho td{font-size:1.02rem; font-weight:700}
 tr.destaque td{background:var(--areia-fraca)}
+
+/* A barra proporcional mora embaixo do número, não atrás dele: atrás, um
+   retângulo curto lê como marca-texto; embaixo, lê como barra. */
+td.barra{position:relative; padding-bottom:1.05rem}
+td.barra::before{content:""; position:absolute; right:1rem; bottom:.5rem;
+  height:3px; border-radius:2px; width:calc(var(--peso, 0) * 82%);
+  background:var(--areia-funda); opacity:.55}
+td.barra.saida::before{background:var(--realizado); opacity:.42}
+tr.total td.barra,tr.bloco td.barra{padding-bottom:.72rem}
+tr.total td.barra::before{display:none}
+
+/* colunas que o leitor liga e desliga */
+table[data-modo="essencial"] .col-perc,
+table[data-modo="essencial"] .col-var,
+table[data-modo="essencial"] .col-arealizar,
+table[data-modo="essencial"] .col-orcado{display:none}
+table[data-modo="orcado"] .col-realizado,
+table[data-modo="orcado"] .col-arealizar{display:none}
+table[data-modo="realizado"] .col-orcado,
+table[data-modo="realizado"] .col-var{display:none}
+
+.segmentado{display:inline-flex; gap:.2rem; padding:.22rem;
+  background:var(--superficie-2); border:1px solid var(--fio);
+  border-radius:999px}
+.segmentado button{border:0; background:none; color:var(--tinta-2);
+  font-size:.8rem; font-weight:500; padding:.32rem .8rem; border-radius:999px}
+.segmentado button:hover{background:var(--superficie); color:var(--tinta)}
+.segmentado button[aria-pressed="true"]{background:var(--acento);
+  color:var(--acento-tinta); font-weight:600}
+
+.legenda-tab{font-size:.87rem; color:var(--tinta-2); margin:.9rem 0 0;
+  max-width:80ch; line-height:1.6}
 
 /* =====================================================================
    marcadores
@@ -284,7 +330,7 @@ label.campo .rot .fraco{font-weight:400}
 /* =====================================================================
    cartões
    ===================================================================== */
-.cartoes{display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr));
+.cartoes{display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
   gap:1.1rem}
 .cartao{border:1px solid var(--fio); border-radius:var(--raio);
   background:var(--superficie); padding:1.3rem 1.4rem 1.4rem;
@@ -472,4 +518,38 @@ footer.rodape svg{height:13px; color:var(--tinta-3)}
   header.topo,nav.abas,.acoes,footer.rodape{display:none}
   body{background:#fff; color:#000; font-size:11px}
   .rolagem,.painel,.cartao,.grafico{border-color:#ccc; break-inside:avoid}
+}
+
+/* =====================================================================
+   navegação fluida
+
+   Três coisas pequenas que juntas tiram a sensação de "recarregou a página":
+   a transição de view entre telas, o prefetch ao passar o mouse (o HTML já
+   chegou quando o clique acontece) e a rolagem suave das âncoras.
+   ===================================================================== */
+@view-transition{navigation:auto}
+::view-transition-old(root),::view-transition-new(root){animation-duration:.18s}
+html{scroll-behavior:smooth; scroll-padding-top:120px}
+
+/* miniatura da curva de caixa no cartão */
+.cartao .curva{display:block; width:100%; height:46px; margin:1rem 0 .2rem}
+.cartao .curva path.area{fill:var(--realizado-fraco)}
+.cartao .curva path.linha{fill:none; stroke:var(--realizado); stroke-width:1.6;
+  stroke-linejoin:round; stroke-linecap:round}
+.cartao .curva line.zero{stroke:var(--fio-forte); stroke-width:1}
+.cartao .curva-legenda{display:flex; justify-content:space-between;
+  font-size:.7rem; color:var(--tinta-3); margin-bottom:.9rem}
+
+/* barra de vendido × estoque */
+.termometro{height:6px; border-radius:3px; background:var(--superficie-2);
+  overflow:hidden; margin:.15rem 0 .5rem}
+.termometro i{display:block; height:100%; background:var(--areia-funda);
+  border-radius:3px}
+.cartao .vendas{display:flex; justify-content:space-between; font-size:.76rem;
+  color:var(--tinta-3); margin-bottom:.15rem}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){
+    animation:none!important}
 }

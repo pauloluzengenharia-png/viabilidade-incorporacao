@@ -115,6 +115,28 @@ LINHAS_DRE = [
     ("LUCRO", "lucro"),
 ]
 
+# Os blocos em que a tela agrupa o resultado. A planilha era uma coluna só de
+# vinte linhas; ler uma coluna de vinte linhas exige saber de cor onde termina a
+# receita e começa o custo. Aqui isso é visível.
+GRUPOS_DRE = [
+    ("De onde vem o dinheiro", [
+        "VGV", "(-) Comissão s/ vendas", "RECEITA C/ VENDAS SPE",
+        "(-) Impostos", "(-) Distratos", "(-) Despesas comerciais",
+        "RECEITA LÍQUIDA"]),
+    ("Terreno", [
+        "(-) Terreno - Permuta", "(-) Terreno - Pagamento", "(-) Terreno - Outros"]),
+    ("Obra", [
+        "(-) Obra - Custo Raso", "(-) Taxa de Administração - Obra"]),
+    ("Incorporação e comercial", [
+        "(-) Taxa de Administração - Carteira", "(-) Incorporação - Decoração",
+        "(-) Incorporação - Outros", "(-) Marketing - Stand",
+        "(-) Marketing - Propaganda", "(-) Outras despesas administrativas",
+        "(+) Outras receitas administrativas"]),
+    ("O que sobra", ["LUCRO"]),
+]
+GRUPO_DA_LINHA = {rotulo: nome for nome, rotulos in GRUPOS_DRE for rotulo in rotulos}
+
+
 # de que linha do fluxo mensal sai cada linha do DRE
 LINHA_DE_CODIGO = {
     "1010101": "RECEITA C/ VENDAS SPE", "ESTOQUE": "RECEITA C/ VENDAS SPE",
@@ -276,6 +298,11 @@ def visao_viabilidade(s: Session, emp_id: int,
     _fechar_subtotais(realizado)
 
     base = atualizado.get("RECEITA LÍQUIDA") or 1.0
+    # A barra compara linha com linha, então os subtotais ficam de fora da
+    # escala: se RECEITA LÍQUIDA entrasse, ela seria a barra cheia e todas as
+    # outras virariam risquinhos. Subtotal já tem a tarja de areia atrás.
+    maior = max((abs(v) for k, v in atualizado.items() if not k.isupper()),
+                default=0.0)
     saida = []
     for rotulo, _ in LINHAS_DRE:
         o, a, r = orcado.get(rotulo, 0.0), atualizado.get(rotulo, 0.0), realizado.get(rotulo, 0.0)
@@ -285,5 +312,11 @@ def visao_viabilidade(s: Session, emp_id: int,
             "variacao": (a / o - 1) if o else None,
             "perc_vv": a / base,
             "destaque": rotulo.isupper(),
+            "grupo": GRUPO_DA_LINHA.get(rotulo, "Outros"),
+            # peso visual da linha: o quanto ela pesa na maior linha do estudo.
+            # É o que vira a barra atrás do número — o olho lê a proporção antes
+            # de ler o algarismo.
+            "peso": 0.0 if rotulo.isupper() else (
+                min(1.0, abs(a) / abs(maior)) if maior else 0.0),
         })
     return saida

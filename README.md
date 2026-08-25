@@ -232,6 +232,27 @@ superfície, nos dois modos. O par aparece pouco e sempre pequeno.
 
 Todo texto tem contraste ≥ 4,5:1 contra o fundo em que assenta, claro e escuro.
 
+**O claro é o padrão, e não o que o sistema operacional pedir.** Num aplicativo
+de tabela financeira, fundo preto com números laranja lê como terminal antigo,
+não como documento — e o que se lê aqui é documento. O escuro continua
+existindo, num botão no cabeçalho, guardado entre visitas.
+
+Três decisões de leitura que valem registrar, porque cada uma resolve um sintoma
+concreto de "cara de sistema":
+
+- **A grade sumiu.** Não há nenhuma linha vertical na tabela e os separadores
+  horizontais só marcam a troca de bloco. Linha entre toda célula é o que faz
+  uma tabela parecer planilha exportada.
+- **As contas viraram blocos.** De onde vem o dinheiro · Terreno · Obra ·
+  Incorporação e comercial · O que sobra. Vinte linhas numa coluna só exigem
+  saber de cor onde termina a receita e começa o custo.
+- **Cada valor carrega uma barra proporcional embaixo.** O olho lê o tamanho
+  antes de ler o algarismo — e o que a barra mostra na Kiev é que a obra é
+  praticamente o estudo inteiro.
+
+E o leitor escolhe quantas colunas quer: `O essencial` mostra três, `Tudo`
+mostra sete. A escolha fica guardada.
+
 ## Onde mora a explicação de cada campo
 
 `app/glossario.py` é a fonte única. A tela `/guia` monta o manual a partir dele,

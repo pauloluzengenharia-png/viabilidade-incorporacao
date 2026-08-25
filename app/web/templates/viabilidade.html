@@ -40,7 +40,7 @@
 
 <div class="acoes">
   <form method="get" style="display:flex; gap:.7rem; align-items:flex-end">
-    <label class="campo">Considerar realizado até
+    <label class="campo"><span class="rot">Considerar realizado até</span>
       <input type="date" name="ate" value="{{ corte }}">
     </label>
     <button type="submit">Aplicar</button>
@@ -51,28 +51,43 @@
   </form>
 </div>
 {% if ind %}
-<p class="rotulo" style="margin:-.8rem 0 1.6rem">última rodada em
+<p class="rotulo" style="margin:-.8rem 0 2.4rem">última rodada em
   {{ ind.executada_em.strftime('%d/%m/%Y às %H:%M') }} · cenário {{ ind.cenario }}</p>
 {% endif %}
 
+<div class="acoes" style="justify-content:space-between; align-items:center">
+  <h2 style="margin:0">Resultado</h2>
+  <div class="segmentado" role="group" aria-label="O que mostrar na tabela">
+    <button type="button" data-modo="essencial" aria-pressed="false">O essencial</button>
+    <button type="button" data-modo="orcado" aria-pressed="false">Contra o orçado</button>
+    <button type="button" data-modo="realizado" aria-pressed="false">Contra o caixa</button>
+    <button type="button" data-modo="tudo" aria-pressed="true">Tudo</button>
+  </div>
+</div>
+
 <div class="rolagem">
-<table>
+<table id="tabela-dre" data-modo="tudo">
   <thead>
     <tr>
-      <th style="min-width:270px">Conta</th>
-      <th class="n">Orçado<br><span class="rotulo" style="font-weight:400">no lançamento</span></th>
+      <th class="conta">Conta</th>
+      <th class="n col-orcado">Orçado<br><span class="rotulo" style="font-weight:400">no lançamento</span></th>
       <th class="n">Atualizado<br><span class="rotulo" style="font-weight:400">premissas de hoje</span></th>
-      <th class="n">% da receita</th>
-      <th class="n">Variação</th>
-      <th class="n">Realizado<br><span class="rotulo" style="font-weight:400">até {{ corte|mes }}</span></th>
-      <th class="n">A realizar</th>
+      <th class="n col-perc">% da receita</th>
+      <th class="n col-var">Variação</th>
+      <th class="n col-realizado">Realizado<br><span class="rotulo" style="font-weight:400">até {{ corte|mes }}</span></th>
+      <th class="n col-arealizar">A realizar</th>
     </tr>
   </thead>
   <tbody>
+  {% set ns = namespace(grupo='') %}
   {% for l in linhas %}
+    {% if l.grupo != ns.grupo %}
+      {% set ns.grupo = l.grupo %}
+      <tr class="bloco"><td colspan="7">{{ l.grupo }}</td></tr>
+    {% endif %}
     {% set v = ajuda_da_linha(l.linha) %}
-    <tr class="{{ 'total' if l.destaque }}">
-      <td>
+    <tr class="{{ 'total' if l.destaque }} {{ 'fecho' if l.linha == 'LUCRO' }}">
+      <td class="conta">
         {% if v %}
         <details class="ajuda">
           <summary title="O que é {{ l.linha }}">{{ l.linha }}</summary>
@@ -85,24 +100,49 @@
         </details>
         {% else %}{{ l.linha }}{% endif %}
       </td>
-      <td class="n {{ 'neg' if l.orcado < 0 }}">{{ l.orcado|moeda(0) }}</td>
-      <td class="n {{ 'neg' if l.atualizado < 0 }}">{{ l.atualizado|moeda(0) }}</td>
-      <td class="n fraco">{{ l.perc_vv|percentual }}</td>
-      <td class="n {{ 'fraco' if l.variacao is none }}">
+      <td class="n col-orcado {{ 'neg' if l.orcado < 0 }}">{{ l.orcado|moeda(0) }}</td>
+      <td class="n barra {{ 'saida neg' if l.atualizado < 0 }}"
+          style="--peso:{{ '%.4f'|format(l.peso) }}">{{ l.atualizado|moeda(0) }}</td>
+      <td class="n fraco col-perc">{{ l.perc_vv|percentual }}</td>
+      <td class="n col-var {{ 'fraco' if l.variacao is none }}">
         {%- if l.variacao is none %}—{% else %}{{ l.variacao|percentual }}{% endif -%}
       </td>
-      <td class="n {{ 'neg' if l.realizado < 0 }}">{{ l.realizado|moeda(0) }}</td>
-      <td class="n {{ 'neg' if l.a_realizar < 0 }}">{{ l.a_realizar|moeda(0) }}</td>
+      <td class="n col-realizado {{ 'neg' if l.realizado < 0 }}">{{ l.realizado|moeda(0) }}</td>
+      <td class="n col-arealizar {{ 'neg' if l.a_realizar < 0 }}">{{ l.a_realizar|moeda(0) }}</td>
     </tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
 <p class="legenda-tab">
-  Valores em reais. <strong>Variação</strong> é atualizado ÷ orçado − 1: numa linha
-  de despesa, positivo é má notícia; numa linha de receita, é boa. Clique no nome
-  de qualquer conta para ver o que ela é e de onde o número vem — ou abra o
+  Valores em reais. A barra atrás de cada valor mostra o peso daquela linha na
+  maior saída do estudo — é para o olho ver a proporção antes de ler o
+  algarismo. <strong>Variação</strong> é atualizado ÷ orçado − 1: numa linha de
+  despesa, positivo é má notícia; numa linha de receita, é boa. Clique no nome
+  de qualquer conta para ver o que ela é e de onde o número vem, ou abra o
   <a href="/guia">guia completo de preenchimento</a>.
 </p>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+// O leitor escolhe quantas colunas quer ver. Sete colunas de número de uma vez
+// é o que fazia a tela parecer relatório de mainframe; três respondem a maior
+// parte das perguntas, e a escolha fica guardada para a próxima visita.
+(function () {
+  const tabela = document.getElementById("tabela-dre");
+  const botoes = document.querySelectorAll(".segmentado button[data-modo]");
+  if (!tabela || !botoes.length) return;
+  let guardado = null;
+  try { guardado = localStorage.getItem("viab_modo_dre"); } catch (e) {}
+  function aplicar(modo) {
+    tabela.dataset.modo = modo;
+    botoes.forEach(b => b.setAttribute("aria-pressed", String(b.dataset.modo === modo)));
+    try { localStorage.setItem("viab_modo_dre", modo); } catch (e) {}
+  }
+  botoes.forEach(b => b.addEventListener("click", () => aplicar(b.dataset.modo)));
+  if (guardado) aplicar(guardado);
+})();
+</script>
 {% endblock %}

@@ -297,6 +297,10 @@ def inicio(request: Request, s: Session = Depends(sessao)):
         SELECT e.*,
                (SELECT count(*) FROM unidade u
                  WHERE u.empreendimento_id = e.id AND u.considerar_na_viabilidade) AS unidades,
+               (SELECT count(*) FROM unidade u
+                 WHERE u.empreendimento_id = e.id AND u.considerar_na_viabilidade
+                   AND u.situacao IN ('Vendida','Permuta')) AS vendidas,
+               r.id AS rodada_id,
                i.vgv, i.lucro, i.margem, i.exposicao_maxima, i.mes_exposicao,
                i.vpl, i.mtir_anual, r.executada_em
           FROM empreendimento e
@@ -307,8 +311,48 @@ def inicio(request: Request, s: Session = Depends(sessao)):
           LEFT JOIN indicador i ON i.rodada_id = r.id
          ORDER BY e.nome
     """)
+
+    # A curva de caixa em miniatura no cartão. Vem do fluxo já gravado — não
+    # recalcula nada — e serve para reconhecer a SPE sem ler número nenhum:
+    # a forma do vale diz mais rápido do que "exposição máxima R$ 60,2 M".
+    for e in emps:
+        e["curva"] = _curva_de_caixa(s, e.get("rodada_id"))
+        e["perc_vendido"] = (e["vendidas"] / e["unidades"]) if e["unidades"] else 0.0
+
     return templates.TemplateResponse(request, "inicio.html",
                                       {"empreendimentos": emps})
+
+
+def _curva_de_caixa(s: Session, rodada_id, largura: float = 260,
+                    altura: float = 46) -> Optional[dict]:
+    """Saldo acumulado do fluxo gravado, já como caminho SVG."""
+    if not rodada_id:
+        return None
+    linhas = q(s, """SELECT mes, sum(valor) AS mov FROM fluxo_projetado
+                      WHERE rodada_id = :r GROUP BY mes ORDER BY mes""", r=rodada_id)
+    if len(linhas) < 2:
+        return None
+
+    saldo, acumulado = [], 0.0
+    for l in linhas:
+        acumulado += float(l["mov"])
+        saldo.append(acumulado)
+
+    topo, fundo = max(saldo + [0.0]), min(saldo + [0.0])
+    amplitude = (topo - fundo) or 1.0
+    passo = largura / (len(saldo) - 1)
+
+    def y(v: float) -> float:
+        return altura - (v - fundo) / amplitude * altura
+
+    pontos = [(i * passo, y(v)) for i, v in enumerate(saldo)]
+    linha = "M" + " L".join(f"{x:.1f},{p:.1f}" for x, p in pontos)
+    base = y(0.0)
+    area = (f"{linha} L{largura:.1f},{base:.1f} L0,{base:.1f} Z")
+    return {"linha": linha, "area": area, "zero": round(base, 1),
+            "w": largura, "h": altura,
+            "inicio": linhas[0]["mes"], "fim": linhas[-1]["mes"],
+            "pior": min(saldo)}
 
 
 def cenario_desatualizado(s: Session, cenario_id: int) -> bool:

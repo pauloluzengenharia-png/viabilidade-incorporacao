@@ -5,9 +5,9 @@
 <div class="regua"></div>
 <h1>Empreendimentos</h1>
 <p class="sub">
-  Cada SPE com os números do cenário marcado como principal. O lucro é do
-  empreendimento inteiro, do lançamento à última parcela; a exposição máxima é o
-  pior saldo de caixa do caminho — quanto precisa estar disponível, e quando.
+  Cada SPE com os números do cenário marcado como principal. A linha em cada
+  cartão é o saldo de caixa ao longo do estudo: o fundo do vale é a exposição
+  máxima — quanto precisa estar disponível, e quando.
 </p>
 
 {% if not empreendimentos %}
@@ -32,6 +32,30 @@
     <h3>{{ e.nome }}</h3>
     <div class="meta">{{ e.unidades }} unidades · {{ e.area_privativa|moeda(0) }} m² privativos
       {%- if e.executada_em %} · calculado em {{ e.executada_em.strftime('%d/%m/%Y') }}{% endif %}</div>
+
+    {% if e.curva %}
+    <svg class="curva" viewBox="0 0 {{ e.curva.w }} {{ e.curva.h }}"
+         preserveAspectRatio="none" role="img"
+         aria-label="Saldo de caixa de {{ e.curva.inicio|mes }} a {{ e.curva.fim|mes }};
+                     pior saldo R$ {{ e.curva.pior|milhoes }} milhões.">
+      <path class="area" d="{{ e.curva.area }}"/>
+      <line class="zero" x1="0" x2="{{ e.curva.w }}"
+            y1="{{ e.curva.zero }}" y2="{{ e.curva.zero }}"/>
+      <path class="linha" d="{{ e.curva.linha }}"/>
+    </svg>
+    <div class="curva-legenda">
+      <span>{{ e.curva.inicio|mes }}</span>
+      <span>saldo de caixa</span>
+      <span>{{ e.curva.fim|mes }}</span>
+    </div>
+    {% endif %}
+
+    <div class="vendas">
+      <span>{{ e.vendidas }} de {{ e.unidades }} vendidas</span>
+      <span>{{ e.perc_vendido|percentual(0) }}</span>
+    </div>
+    <div class="termometro"><i style="width:{{ (e.perc_vendido * 100)|round(1) }}%"></i></div>
+
     <div class="linhas">
       <span>VGV</span><span>R$ {{ e.vgv|milhoes }} M</span>
       <span>Lucro</span><span>R$ {{ e.lucro|milhoes }} M</span>
