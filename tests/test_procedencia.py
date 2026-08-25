@@ -47,18 +47,20 @@ def calculado(sessao, kiev):
             "obra": e.obra, "premissas": e.premissas}
 
 
-def test_toda_linha_do_resultado_tem_formula_ou_e_soma(calculado):
+def _formula(sessao, calculado, rotulo):
+    _, itens = procedencia.composicao_da_linha(sessao, calculado["cenario"], rotulo)
+    return procedencia.formula_da_linha(rotulo, calculado["dre"], calculado["bloco"],
+                                        calculado["obra"], calculado["premissas"], itens)
+
+
+def test_toda_linha_do_resultado_tem_formula_ou_e_soma(sessao, calculado):
     """
     Uma linha sem fórmula e sem ser subtotal é uma linha que a tela não sabe
     explicar — e é justamente sobre ela que a pergunta vai aparecer.
     """
     subtotais = {"RECEITA LÍQUIDA", "LUCRO", "VGV", "RECEITA C/ VENDAS SPE"}
-    sem = []
-    for rotulo, _ in LINHAS_DRE:
-        f = procedencia.formula_da_linha(rotulo, calculado["dre"], calculado["bloco"],
-                                         calculado["obra"], calculado["premissas"])
-        if f is None and rotulo not in subtotais:
-            sem.append(rotulo)
+    sem = [rotulo for rotulo, _ in LINHAS_DRE
+           if _formula(sessao, calculado, rotulo) is None and rotulo not in subtotais]
     assert not sem, sem
 
 
@@ -70,8 +72,7 @@ def test_a_formula_chega_no_numero_da_tabela(calculado, sessao):
     tabela = {l["linha"]: l for l in visao_viabilidade(sessao, calculado["emp"])}
     divergentes = []
     for rotulo, _ in LINHAS_DRE:
-        f = procedencia.formula_da_linha(rotulo, calculado["dre"], calculado["bloco"],
-                                         calculado["obra"], calculado["premissas"])
+        f = _formula(sessao, calculado, rotulo)
         if not f:
             continue
         esperado = tabela[rotulo]["atualizado"]
@@ -100,7 +101,7 @@ def test_os_lancamentos_somam_a_coluna_realizado(sessao, kiev):
     assert not divergentes, divergentes
 
 
-def test_o_excel_da_formula_referencia_todos_os_operandos(calculado):
+def test_o_excel_da_formula_referencia_todos_os_operandos(sessao, calculado):
     """
     O template da fórmula vira referência de célula na planilha exportada. Um
     `{3}` numa fórmula de dois operandos sairia como texto solto na planilha.
@@ -108,8 +109,7 @@ def test_o_excel_da_formula_referencia_todos_os_operandos(calculado):
     import re
     ruins = []
     for rotulo, _ in LINHAS_DRE:
-        f = procedencia.formula_da_linha(rotulo, calculado["dre"], calculado["bloco"],
-                                         calculado["obra"], calculado["premissas"])
+        f = _formula(sessao, calculado, rotulo)
         if not f:
             continue
         indices = [int(n) for n in re.findall(r"\{(\d+)\}", f.excel)]

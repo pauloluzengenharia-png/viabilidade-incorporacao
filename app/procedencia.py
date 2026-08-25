@@ -53,15 +53,23 @@ class Formula:
 # =====================================================================
 # a fórmula de cada linha, a partir do cálculo já feito
 # =====================================================================
-def formula_da_linha(rotulo: str, dre, bloco, obra, p) -> Optional[Formula]:
+def formula_da_linha(rotulo: str, dre, bloco, obra, p,
+                     composicao: Optional[list] = None) -> Optional[Formula]:
     """
     Recebe o resultado do motor e descreve a linha pedida.
 
     Nada é recalculado aqui: os valores vêm do mesmo objeto que alimentou a
     tabela. Se um dia a conta mudar no motor, esta tela muda junto.
+
+    Quando a linha é um setor de custo, a fórmula é a própria composição: cada
+    item vira um operando, e o resultado é a soma. Não há número solto para
+    explicar — o número É a lista.
     """
     def t(rot, val, origem="", chave="", formato="moeda"):
         return Termo(rot, val, origem, chave, formato)
+
+    if composicao is not None:
+        return _formula_de_composicao(rotulo, composicao)
 
     receita_spe = bloco.receita_spe
     terreno_pgto = -sum(p.terreno_parcelas)
@@ -230,6 +238,50 @@ def formula_da_linha(rotulo: str, dre, bloco, obra, p) -> Optional[Formula]:
             "Não é lucro anual e não desconta imposto de renda do sócio.")
 
     return None
+
+
+def _formula_de_composicao(rotulo: str, itens: list) -> Formula:
+    """A linha é a soma dos itens que alguém orçou, um a um."""
+    termos = []
+    for i in itens:
+        detalhe = []
+        if i.get("quantidade") and i.get("valor_unitario"):
+            unidade = f" {i['unidade']}" if i.get("unidade") else ""
+            detalhe.append(f"{float(i['quantidade']):g}{unidade} × "
+                           f"R$ {float(i['valor_unitario']):,.2f}".replace(",", " "))
+        if i.get("observacao"):
+            detalhe.append(i["observacao"])
+        termos.append(Termo(i["descricao"], -float(i["valor"]),
+                            " · ".join(detalhe) or "item da composição"))
+    if not termos:
+        return Formula(
+            "Nenhum item na composição — a linha vale zero", [], 0.0,
+            "Este setor ainda não foi orçado. Enquanto não tiver item nenhum, "
+            "ele não entra no resultado — o que é diferente de custar zero.")
+    quantos = ("Soma do único item da composição" if len(termos) == 1
+               else f"Soma dos {len(termos)} itens da composição")
+    return Formula(quantos, termos,
+                   sum(x.valor for x in termos),
+                   "Cada item é orçado na tela de custos deste setor. Mudar "
+                   "qualquer um deles muda a linha do resultado.")
+
+
+def composicao_da_linha(s: Session, cenario_id: int, rotulo: str):
+    """
+    Os itens que compõem a linha, quando ela é um setor de custo.
+
+    Devolve `None` para as linhas que não são setor — e a diferença importa:
+    `None` significa "esta linha tem fórmula própria", lista vazia significa
+    "é setor de custo e ninguém orçou ainda".
+    """
+    setor = q(s, "SELECT codigo, nome, resumo FROM setor_custo WHERE linha_dre = :l",
+              l=rotulo)
+    if not setor:
+        return None, None
+    itens = q(s, """SELECT * FROM composicao_item
+                     WHERE cenario_id = :c AND setor = :s
+                     ORDER BY ordem, id""", c=cenario_id, s=setor[0]["codigo"])
+    return setor[0], itens
 
 
 # =====================================================================

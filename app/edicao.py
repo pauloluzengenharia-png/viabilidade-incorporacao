@@ -261,21 +261,21 @@ Os números que a diretoria escolhe. Percentuais em fração — <code>0,045</co
 4,5%; valores fixos em reais. Mudar qualquer um marca o cenário como
 desatualizado até você recalcular.""", por_cenario=True, grupos=[
     Grupo("Deduções da receita",
-          "Incidem sobre o que a SPE recebe, não sobre o que fatura.", [
+          "Incidem sobre o que a SPE recebe, não sobre o que fatura. "
+          "As despesas comerciais saíram daqui: agora têm composição própria, "
+          "em Custos.", [
         Campo("ret", "Impostos (RET)", "numero", "% da receita"),
         Campo("distratos", "Distratos", "numero", "% da receita"),
-        Campo("despesas_comerciais", "Despesas comerciais", "numero", "R$"),
     ]),
     Grupo("Taxas do incorporador", "", [
         Campo("taxa_adm_obra", "Taxa de administração — obra", "numero", "% do custo raso"),
         Campo("taxa_viabilizacao", "Taxa de administração — carteira", "numero", "% da receita"),
         Campo("outras_desp_adm_perc", "Outras despesas administrativas", "numero", "% do custo raso"),
     ]),
-    Grupo("Incorporação e marketing", "Valores fixos, decididos no lançamento.", [
-        Campo("decoracao", "Decoração", "numero", "R$"),
-        Campo("projetos_e_outros", "Incorporação — projetos e outros", "numero", "R$"),
-        Campo("marketing_stand", "Marketing — stand", "numero", "R$"),
-        Campo("marketing_propaganda", "Marketing — propaganda", "numero", "R$"),
+    Grupo("Outras entradas",
+          "Decoração, projetos, marketing, legalização e regularização "
+          "fundiária saíram daqui: cada um virou um setor com composição "
+          "própria, em Custos.", [
         Campo("outras_entradas", "Outras receitas administrativas", "numero", "R$"),
     ]),
     Grupo("Correção monetária",
@@ -795,3 +795,78 @@ def historico(s: Session, emp_id: int, limite: int = 200) -> list[dict]:
          WHERE a.empreendimento_id = :e
          ORDER BY a.em DESC, a.id DESC
          LIMIT :n""", e=emp_id, n=limite)
+
+
+# =====================================================================
+# composição de um setor de custo
+# =====================================================================
+def setores(s: Session) -> list[dict]:
+    return q(s, "SELECT * FROM setor_custo ORDER BY ordem")
+
+
+def setor(s: Session, codigo: str) -> Optional[dict]:
+    r = q(s, "SELECT * FROM setor_custo WHERE codigo = :c", c=codigo)
+    return r[0] if r else None
+
+
+def ler_composicao(s: Session, cenario_id: int, codigo: str) -> list[dict]:
+    return q(s, """SELECT * FROM composicao_item
+                    WHERE cenario_id = :c AND setor = :s
+                    ORDER BY ordem, id""", c=cenario_id, s=codigo)
+
+
+def totais_por_setor(s: Session, cenario_id: int) -> dict[str, dict]:
+    linhas = q(s, """SELECT setor, count(*) AS n, sum(valor) AS total
+                       FROM composicao_item WHERE cenario_id = :c
+                      GROUP BY setor""", c=cenario_id)
+    return {l["setor"]: {"n": l["n"], "total": float(l["total"])} for l in linhas}
+
+
+def gravar_composicao(s: Session, *, emp_id: int, cenario_id: int, codigo: str,
+                      itens: list[dict], autor: str) -> list[str]:
+    """
+    Substitui a composição inteira do setor.
+
+    Compara por **posição**, como o terreno: a composição é uma lista, e
+    comparar pelo id faria remover a segunda linha parecer "a segunda mudou, a
+    terceira mudou, a quarta sumiu". O histórico registra item a item.
+    """
+    antes = [(i["descricao"], float(i["valor"])) for i in
+             ler_composicao(s, cenario_id, codigo)]
+    depois = [(i["descricao"], i["valor"]) for i in itens
+              if i["descricao"].strip() and i["valor"] > 0]
+
+    mudou = []
+    for i in range(max(len(antes), len(depois))):
+        a = antes[i] if i < len(antes) else None
+        d = depois[i] if i < len(depois) else None
+        if a == d:
+            continue
+        registrar(s, emp_id=emp_id, cenario_id=cenario_id, modulo="custos",
+                  entidade=f"{codigo} · item {i + 1}", campo="descrição e valor",
+                  antes=_item_texto(a), depois=_item_texto(d), autor=autor)
+        mudou.append(f"item {i + 1}")
+
+    if not mudou:
+        return []
+
+    q(s, """DELETE FROM composicao_item WHERE cenario_id = :c AND setor = :s""",
+      c=cenario_id, s=codigo)
+    for ordem, item in enumerate(
+            [i for i in itens if i["descricao"].strip() and i["valor"] > 0], start=1):
+        q(s, """INSERT INTO composicao_item
+                  (cenario_id, setor, ordem, descricao, quantidade, unidade,
+                   valor_unitario, valor, observacao)
+                VALUES (:c,:s,:o,:d,:q,:u,:vu,:v,:ob)""",
+          c=cenario_id, s=codigo, o=ordem, d=item["descricao"].strip(),
+          q=item.get("quantidade") or None, u=(item.get("unidade") or "").strip() or None,
+          vu=item.get("valor_unitario") or None, v=item["valor"],
+          ob=(item.get("observacao") or "").strip() or None)
+    return mudou
+
+
+def _item_texto(item) -> Optional[str]:
+    if not item:
+        return None
+    descricao, valor = item
+    return f"{descricao} — R$ {moeda(valor)}"

@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block titulo %}Custos — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Setores de custo</h1>
+<p class="sub">
+  Cada setor tem a sua composição, item a item, e a linha do resultado recebe a
+  <strong>soma</strong> dessa composição. É a diferença entre “decoração custa
+  1,5 milhão” e “decoração é mobiliário do decorado, projeto de interiores,
+  enxoval e paisagismo, e cada um custa isto”.
+</p>
+
+{% include "_cabeca_lista.html" %}
+
+{% set ns = namespace(bloco='') %}
+{% for st in setores %}
+  {% if st.bloco != ns.bloco %}
+    {% set ns.bloco = st.bloco %}
+    <h2>{{ st.bloco }}</h2>
+    <div class="modulos" style="margin-bottom:.6rem">
+  {% endif %}
+  {% set info = totais.get(st.codigo) %}
+  <a class="modulo" href="/empreendimento/{{ emp.id }}/dados/custos/{{ st.codigo }}?cenario={{ cenario.id }}">
+    <h3>{{ st.nome }}</h3>
+    <p>{{ st.resumo|enfase }}</p>
+    <span class="estado">
+      {%- if info -%}
+        R$ {{ info.total|dinheiro }} · {{ info.n }} {{ 'item' if info.n == 1 else 'itens' }}
+      {%- else -%}
+        <span class="marca-a">sem composição</span>
+      {%- endif -%}
+    </span>
+  </a>
+  {% if loop.last or setores[loop.index].bloco != st.bloco %}</div>{% endif %}
+{% endfor %}
+
+<p class="legenda-tab" style="margin-top:2rem">
+  Um setor sem item nenhum vale <b>zero</b> no resultado — o que é diferente de
+  custar zero. Se você sabe que existe gasto ali e a composição está vazia, o
+  estudo está subestimando o custo.
+</p>
+{% endblock %}

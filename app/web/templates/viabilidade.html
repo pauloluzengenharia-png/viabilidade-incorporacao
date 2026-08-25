@@ -92,10 +92,10 @@
         <details class="ajuda">
           <summary title="O que é {{ l.linha }}">{{ l.linha }}</summary>
           <div class="texto">
-            {{ v.o_que }}
-            {%- if v.de_onde %} <b>De onde vem:</b> {{ v.de_onde }}{% endif %}
-            {%- if v.como and not v.como.startswith('Não se digita') %} <b>Como preencher:</b> {{ v.como }}{% endif %}
-            {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado }}{% endif %}
+            {{ v.o_que|enfase }}
+            {%- if v.de_onde %} <b>De onde vem:</b> {{ v.de_onde|enfase }}{% endif %}
+            {%- if v.como and not v.como.startswith('Não se digita') %} <b>Como preencher:</b> {{ v.como|enfase }}{% endif %}
+            {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado|enfase }}{% endif %}
           </div>
         </details>
         {% else %}{{ l.linha }}{% endif %}

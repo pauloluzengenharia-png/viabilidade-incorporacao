@@ -166,20 +166,40 @@ def carregar_tabela(s: Session, emp_id: int, nome: str) -> Optional[TabelaVenda]
         chaves=float(t["perc_chaves"]), n_mensais=int(t["qtd_mensais"]))
 
 
+#: Os setores cujo valor é a soma da composição, e não uma premissa escalar.
+SETORES_COMPOSTOS = ("regularizacao_fundiaria", "legalizacao", "decoracao",
+                     "projetos_e_outros", "marketing_stand",
+                     "marketing_propaganda", "despesas_comerciais")
+
+
+def somar_composicoes(s: Session, cenario_id: int) -> dict[str, float]:
+    """O total de cada setor de custo, somando os itens da composição."""
+    linhas = q(s, """SELECT setor, sum(valor) AS total FROM composicao_item
+                      WHERE cenario_id = :c GROUP BY setor""", c=cenario_id)
+    return {l["setor"]: float(l["total"]) for l in linhas}
+
+
 def carregar_premissas(s: Session, cenario: dict, emp: dict) -> Premissas:
     linhas = q(s, "SELECT chave, valor FROM premissa WHERE cenario_id = :c",
                c=cenario["id"])
     v = {l["chave"]: float(l["valor"]) for l in linhas}
 
     p = Premissas(nome=cenario["nome"], mes_base=cenario["mes_base"])
-    for chave in ("preco_m2_estoque", "ret", "distratos", "despesas_comerciais",
+    for chave in ("preco_m2_estoque", "ret", "distratos",
                   "terreno_registro_perc", "taxa_adm_obra", "taxa_viabilizacao",
-                  "decoracao", "projetos_e_outros", "marketing_stand",
-                  "marketing_propaganda", "outras_desp_adm_perc", "outras_entradas",
+                  "outras_desp_adm_perc", "outras_entradas",
                   "tma_anual", "financiamento_limite", "financiamento_juros_aa",
                   "financiamento_gatilho_obra"):
         if chave in v:
             setattr(p, chave, v[chave])
+
+    # Os setores de custo vêm da composição e só dela. A migration 011 apagou as
+    # premissas escalares correspondentes justamente para não haver um segundo
+    # lugar de onde o valor pudesse ressurgir: esvaziar a composição de um setor
+    # tem de zerar a linha, e não devolvê-la ao número que estava lá antes.
+    for setor, total in somar_composicoes(s, cenario["id"]).items():
+        if hasattr(p, setor):
+            setattr(p, setor, total)
     if "financiamento_prazo_amort" in v:
         p.financiamento_prazo_amort = int(v["financiamento_prazo_amort"])
     if "meses_pos_chaves" in v:

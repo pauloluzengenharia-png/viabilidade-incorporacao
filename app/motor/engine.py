@@ -146,6 +146,8 @@ class DRE:
     terreno_permuta: float
     terreno_pagamento: float
     terreno_registro: float
+    regularizacao_fundiaria: float
+    legalizacao: float
     obra_custo_raso: float
     taxa_adm_obra: float
     taxa_viabilizacao: float
@@ -170,12 +172,14 @@ class DRE:
 
     @property
     def despesas(self) -> float:
-        return (self.decoracao + self.projetos_e_outros + self.marketing_stand
-                + self.marketing_propaganda + self.outras_desp_adm + self.outras_entradas)
+        return (self.legalizacao + self.decoracao + self.projetos_e_outros
+                + self.marketing_stand + self.marketing_propaganda
+                + self.outras_desp_adm + self.outras_entradas)
 
     @property
     def gastos(self) -> float:
         return (self.terreno_permuta + self.terreno_pagamento + self.terreno_registro
+                + self.regularizacao_fundiaria
                 + self.obra_custo_raso + self.taxa_adm_obra + self.taxa_viabilizacao
                 + self.despesas)
 
@@ -221,6 +225,8 @@ def calcular_dre(bloco: BlocoVGV, obra: Obra, p: Premissas) -> DRE:
         terreno_permuta=-bloco.permuta - bloco.disponivel_leal,
         terreno_pagamento=terreno_pgto,
         terreno_registro=terreno_pgto * p.terreno_registro_perc,
+        regularizacao_fundiaria=-p.regularizacao_fundiaria,
+        legalizacao=-p.legalizacao,
         obra_custo_raso=custo_raso,
         taxa_adm_obra=custo_raso * p.taxa_adm_obra,
         taxa_viabilizacao=-receita_spe * p.taxa_viabilizacao,
@@ -530,6 +536,20 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
             if inicio + k < len(meses):
                 v[meses[inicio + k]] = -total / n
         return LinhaFluxo(cod, desc, "GASTO", v)
+
+    # Regularização e legalização acompanham a curva física: são gastos que
+    # correm junto com a obra, não verba que sai de uma vez. `pela_obra`
+    # distribui o total na mesma proporção do desembolso de cada mês.
+    total_obra = sum(obra_mes.values()) or 1.0
+
+    def pela_obra(total: float, cod: str, desc: str) -> LinhaFluxo:
+        return LinhaFluxo(cod, desc, "GASTO",
+                          {m: -total * (obra_mes[m] / total_obra) for m in meses})
+
+    L.append(pela_obra(p.regularizacao_fundiaria, "REG_FUND",
+                       "(-) Terreno — regularização fundiária"))
+    L.append(pela_obra(p.legalizacao, "LEGAL",
+                       "(-) Incorporação — legalização"))
 
     n_obra = sum(1 for m in meses if obra_mes[m])
     L.append(diluir(p.decoracao, max(n_obra - 6, 0), 6, "DECOR", "(-) Incorporação — decoração"))

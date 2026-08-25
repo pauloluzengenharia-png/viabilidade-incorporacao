@@ -72,8 +72,28 @@ def dinheiro(v):
     return edicao.moeda(v)
 
 
+def enfase(texto):
+    """
+    O grifo do glossário, e nada além dele.
+
+    Os verbetes são escritos em texto puro e marcam o termo importante com
+    `**assim**`, ou `*assim*` quando é só um contraste — é o que se digita
+    naturalmente e o que sobrevive a virar planilha ou e-mail. Aqui isso vira
+    negrito e itálico na tela. Tudo o mais é escapado antes: o texto continua
+    sendo dado, não HTML.
+    """
+    import re
+    from markupsafe import Markup, escape
+    if not texto:
+        return ""
+    marcado = str(escape(texto))
+    marcado = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", marcado)
+    marcado = re.sub(r"(?<![*\w])\*(?!\s)(.+?)(?<!\s)\*(?![*\w])", r"<i>\1</i>", marcado)
+    return Markup(marcado)
+
+
 templates.env.filters.update(moeda=moeda, milhoes=milhoes, dinheiro=dinheiro,
-                             percentual=percentual, mes=mes_curto)
+                             percentual=percentual, mes=mes_curto, enfase=enfase)
 # a explicação de cada linha mora no glossário; o template só a pendura
 def _slug(rotulo: str) -> str:
     """Um identificador de URL estável a partir do rótulo da conta."""
@@ -163,10 +183,12 @@ def tela_linha(emp_id: int, slug: str, request: Request,
     from .motor.engine import calcular_vgv
     bloco = calcular_vgv(entradas.unidades, entradas.premissas, entradas.tabela)
 
+    setor, itens = procedencia.composicao_da_linha(s, cen["id"], rotulo)
     formula = procedencia.formula_da_linha(rotulo, dre, bloco, entradas.obra,
-                                           entradas.premissas)
+                                           entradas.premissas, itens)
     chaves = [t.chave for t in (formula.termos if formula else []) if t.chave]
     ctx = {
+        "setor": setor,
         "emp": emp, "aba": "viabilidade", "rotulo": rotulo, "corte": corte,
         "cenario": cen, "cenarios": _cenarios(s, emp_id),
         "formula": formula,
@@ -200,8 +222,9 @@ def baixar_memoria(emp_id: int, slug: str, ate: Optional[str] = None,
     dre, _, _ = calcular(entradas)
     from .motor.engine import calcular_vgv
     bloco = calcular_vgv(entradas.unidades, entradas.premissas, entradas.tabela)
+    _, itens = procedencia.composicao_da_linha(s, cen["id"], rotulo)
     formula = procedencia.formula_da_linha(rotulo, dre, bloco, entradas.obra,
-                                           entradas.premissas)
+                                           entradas.premissas, itens)
     chaves = [t.chave for t in (formula.termos if formula else []) if t.chave]
 
     conteudo = planilha.memoria_de_calculo(
@@ -230,6 +253,7 @@ MENU_DADOS = [
     {"slug": "premissas", "titulo": "Premissas"},
     {"slug": "comercial", "titulo": "Preço e tabela"},
     {"slug": "plano",     "titulo": "Plano de vendas"},
+    {"slug": "custos",    "titulo": "Custos"},
     {"slug": "obra",      "titulo": "Obra"},
     {"slug": "terreno",   "titulo": "Terreno"},
     {"slug": "unidades",  "titulo": "Unidades"},
@@ -269,6 +293,7 @@ def tela_dados(emp_id: int, request: Request, s: Session = Depends(sessao)):
         "premissas": f"{n('SELECT count(*) AS n FROM premissa WHERE cenario_id = :c', c=cen['id'])} premissas · cenário {cen['nome']}",
         "comercial": f"{n('SELECT count(*) AS n FROM tabela_venda WHERE empreendimento_id = :e', e=emp_id)} tabela(s) de venda",
         "plano": f"{n('SELECT coalesce(sum(quantidade),0) AS n FROM plano_venda WHERE cenario_id = :c', c=cen['id'])} unidades no plano",
+        "custos": f"{n('SELECT count(*) AS n FROM composicao_item WHERE cenario_id = :c', c=cen['id'])} item(ns) de composição",
         "obra": f"{n('SELECT count(*) AS n FROM orcamento_obra WHERE empreendimento_id = :e', e=emp_id)} versão(ões) de orçamento",
         "terreno": f"{n('SELECT count(*) AS n FROM premissa_terreno WHERE cenario_id = :c', c=cen['id'])} parcela(s)",
         "unidades": f"{n('SELECT count(*) AS n FROM unidade WHERE empreendimento_id = :e', e=emp_id)} unidades",
@@ -282,6 +307,76 @@ def tela_historico(emp_id: int, request: Request, s: Session = Depends(sessao)):
     ctx = _contexto_dados(s, emp_id, "historico")
     ctx["eventos"] = edicao.historico(s, emp_id, limite=300)
     return templates.TemplateResponse(request, "historico.html", ctx)
+
+
+# ------------------------------------------------------ setores de custo
+@app.get("/empreendimento/{emp_id}/dados/custos", response_class=HTMLResponse)
+def tela_custos(emp_id: int, request: Request, cenario: Optional[int] = None,
+                s: Session = Depends(sessao)):
+    """O hub dos setores: cada um com quantos itens tem e quanto soma."""
+    ctx = _contexto_dados(s, emp_id, "custos")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    ctx.update(cenarios=_cenarios(s, emp_id), cenario=cen,
+               congelado=bool(cen["tipo"] == "orcado"), salvo=None, erros=[],
+               setores=edicao.setores(s), totais=edicao.totais_por_setor(s, cen["id"]))
+    return templates.TemplateResponse(request, "custos.html", ctx)
+
+
+@app.get("/empreendimento/{emp_id}/dados/custos/{codigo}", response_class=HTMLResponse)
+def tela_setor(emp_id: int, codigo: str, request: Request,
+               cenario: Optional[int] = None, salvo: Optional[str] = None,
+               s: Session = Depends(sessao)):
+    st = edicao.setor(s, codigo)
+    if not st:
+        raise HTTPException(404, "setor de custo não encontrado")
+    ctx = _contexto_dados(s, emp_id, "custos")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    itens = edicao.ler_composicao(s, cen["id"], codigo)
+    ctx.update(cenarios=_cenarios(s, emp_id), cenario=cen,
+               congelado=bool(cen["tipo"] == "orcado"),
+               salvo=salvo.split("|") if salvo else None, erros=[],
+               setor=st, itens=itens,
+               total=sum(float(i["valor"]) for i in itens))
+    return templates.TemplateResponse(request, "custo_setor.html", ctx)
+
+
+@app.post("/empreendimento/{emp_id}/dados/custos/{codigo}")
+async def salvar_setor(emp_id: int, codigo: str, request: Request,
+                       cenario: Optional[int] = None,
+                       s: Session = Depends(sessao),
+                       autor: str = Depends(usuario_atual)):
+    st = edicao.setor(s, codigo)
+    if not st:
+        raise HTTPException(404, "setor de custo não encontrado")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    if cen["tipo"] == "orcado":
+        raise HTTPException(409, "cenário congelado não aceita edição")
+
+    f = await request.form()
+    itens = []
+    for descricao, qtd, unidade, unitario, valor, obs in zip(
+            f.getlist("descricao"), f.getlist("quantidade"), f.getlist("unidade"),
+            f.getlist("valor_unitario"), f.getlist("valor"), f.getlist("observacao")):
+        quantidade = edicao.num(qtd)
+        unit = edicao.num(unitario)
+        # quantidade × unitário manda quando os dois existem; o total digitado
+        # vale quando o item é verba fechada
+        total = quantidade * unit if quantidade and unit else edicao.num(valor)
+        itens.append({"descricao": descricao, "quantidade": quantidade or None,
+                      "unidade": unidade, "valor_unitario": unit or None,
+                      "valor": total, "observacao": obs})
+
+    try:
+        mudou = edicao.gravar_composicao(s, emp_id=emp_id, cenario_id=cen["id"],
+                                         codigo=codigo, itens=itens, autor=autor)
+        s.commit()
+    except Exception as e:                          # noqa: BLE001
+        s.rollback()
+        raise HTTPException(422, f"o banco recusou: {e}")
+
+    destino = (f"/empreendimento/{emp_id}/dados/custos/{codigo}"
+               f"?salvo={'|'.join(mudou)}&cenario={cen['id']}")
+    return RedirectResponse(destino, status_code=303)
 
 
 # ------------------------------------------------ módulos de campos simples

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block titulo %}{{ setor.nome }} — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<p style="margin:0 0 1.2rem">
+  <a class="botao" href="/empreendimento/{{ emp.id }}/dados/custos?cenario={{ cenario.id }}">
+    &larr; Todos os setores</a>
+</p>
+
+<div class="regua"></div>
+<span class="rotulo">{{ setor.bloco }}</span>
+<h1>{{ setor.nome }}</h1>
+<p class="sub">{{ setor.resumo|enfase }}</p>
+
+{% include "_cabeca_lista.html" %}
+
+<form method="post"
+      action="/empreendimento/{{ emp.id }}/dados/custos/{{ setor.codigo }}?cenario={{ cenario.id }}">
+  <div class="rolagem">
+    <table class="editavel" id="tabela-composicao">
+      <thead><tr>
+        <th class="conta" style="min-width:260px">Item</th>
+        <th class="n" style="width:110px">Quantidade</th>
+        <th style="width:90px">Unidade</th>
+        <th class="n" style="width:150px">Valor unitário</th>
+        <th class="n" style="width:160px">Total</th>
+        <th style="min-width:180px">Observação</th>
+        <th style="width:52px"></th>
+      </tr></thead>
+      <tbody>
+      {% for i in itens %}
+        <tr>
+          <td class="conta"><input type="text" name="descricao" value="{{ i.descricao }}"></td>
+          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off"
+                     name="quantidade" value="{{ i.quantidade|dinheiro if i.quantidade else '' }}"></td>
+          <td><input type="text" name="unidade" value="{{ i.unidade or '' }}"
+                     placeholder="un, m², vb"></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor_unitario"
+                   data-formato="moeda"
+                   value="{{ i.valor_unitario|dinheiro if i.valor_unitario else '' }}"></span></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor"
+                   data-formato="moeda" value="{{ i.valor|dinheiro }}"></span></td>
+          <td><input type="text" name="observacao" value="{{ i.observacao or '' }}"></td>
+          <td><button type="button" class="apagar" title="Remover o item"
+                      aria-label="Remover o item">&times;</button></td>
+        </tr>
+      {% else %}
+        <tr>
+          <td class="conta"><input type="text" name="descricao" value=""></td>
+          <td class="numerico"><input type="text" inputmode="decimal" autocomplete="off" name="quantidade" value=""></td>
+          <td><input type="text" name="unidade" value="" placeholder="un, m², vb"></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor_unitario" data-formato="moeda" value=""></span></td>
+          <td class="numerico"><span class="com-adorno tem-adorno">
+            <span class="adorno" aria-hidden="true">R$</span>
+            <input type="text" inputmode="decimal" autocomplete="off" name="valor" data-formato="moeda" value=""></span></td>
+          <td><input type="text" name="observacao" value=""></td>
+          <td><button type="button" class="apagar" aria-label="Remover o item">&times;</button></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="soma certa" id="soma-composicao">
+    <span>Total do setor</span>
+    <span class="valor">R$ {{ total|dinheiro }}</span>
+  </div>
+
+  <p class="legenda-tab">
+    Preencha <b>quantidade × valor unitário</b> quando o item se mede assim —
+    o total é calculado. Para verba fechada, deixe os dois em branco e digite só
+    o total. Este número vai inteiro para a linha
+    <b>{{ setor.linha_dre }}</b> do resultado, e sai do caixa
+    {{ {'obra': 'acompanhando a curva física da obra',
+        'lancamento': 'diluído até o lançamento',
+        'a_vista': 'à vista, no primeiro mês projetado',
+        'entrega': 'concentrado no fim da obra'}[setor.desembolso] }}.
+  </p>
+
+  <div class="acoes" style="margin-top:1.4rem">
+    <button type="button" id="mais-um">Adicionar item</button>
+    <button class="principal" type="submit" {{ 'disabled' if congelado }}>Salvar composição</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+{% include "_dinheiro.html" %}
+<script>
+(function () {
+  const corpo = document.querySelector("#tabela-composicao tbody");
+  const soma = document.querySelector("#soma-composicao .valor");
+  function ler(el) {
+    const v = String(el.value).replace(/R\$|\s/g, "");
+    if (!v) return 0;
+    return parseFloat(v.includes(",") ? v.replace(/\./g, "").replace(",", ".") : v) || 0;
+  }
+  function conta() {
+    let t = 0;
+    corpo.querySelectorAll("tr").forEach(tr => {
+      const q = ler(tr.querySelector('[name="quantidade"]'));
+      const u = ler(tr.querySelector('[name="valor_unitario"]'));
+      const alvo = tr.querySelector('[name="valor"]');
+      // quantidade × unitário manda quando os dois existem
+      if (q && u) alvo.value = (q * u).toLocaleString("pt-BR",
+          {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      t += ler(alvo);
+    });
+    soma.textContent = "R$ " + t.toLocaleString("pt-BR",
+        {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  document.getElementById("mais-um").addEventListener("click", () => {
+    const nova = corpo.lastElementChild.cloneNode(true);
+    nova.querySelectorAll("input").forEach(i => i.value = "");
+    corpo.appendChild(nova); conta();
+    nova.querySelector('[name="descricao"]').focus();
+  });
+  corpo.addEventListener("click", e => {
+    if (!e.target.closest(".apagar")) return;
+    if (corpo.children.length > 1) e.target.closest("tr").remove();
+    conta();
+  });
+  corpo.addEventListener("input", conta);
+  conta();
+})();
+</script>
+{% endblock %}

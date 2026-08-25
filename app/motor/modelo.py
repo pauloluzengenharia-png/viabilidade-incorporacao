@@ -225,6 +225,13 @@ class Premissas:
     taxa_viabilizacao: float = 0.05          # L38 — sobre a receita SPE (taxa de carteira)
 
     # --- despesas de incorporação/marketing ---
+    # --- regularização do terreno e legalização do empreendimento ---
+    # Dois custos que a planilha pagava sem enxergar: ficavam diluídos em
+    # "projetos e outros" ou no percentual de registro. Cada um tem a sua
+    # composição própria, item a item, na tela de custos.
+    regularizacao_fundiaria: float = 0.0     # composição do setor
+    legalizacao: float = 0.0                 # composição do setor
+
     decoracao: float = 1_545_045.14          # M40
     projetos_e_outros: float = 2_899_156.99  # M41
     marketing_stand: float = 0.0             # M42

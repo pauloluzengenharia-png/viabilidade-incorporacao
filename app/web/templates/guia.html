@@ -20,7 +20,7 @@
 {% for s in secoes %}
 <section id="{{ s.slug }}">
   <h2>{{ s.titulo }}</h2>
-  <p class="legenda-tab" style="margin:0 0 1.3rem">{{ s.resumo }}</p>
+  <p class="legenda-tab" style="margin:0 0 1.3rem">{{ s.resumo|enfase }}</p>
 
   {% for v in s.verbetes %}
   <article class="verbete">
@@ -28,14 +28,14 @@
       {{ v.titulo }}
       {% if v.unidade %}<span class="unidade">{{ v.unidade }}</span>{% endif %}
     </h3>
-    <p>{{ v.o_que }}</p>
+    <p>{{ v.o_que|enfase }}</p>
     <dl>
-      {% if v.de_onde %}<dt>De onde vem</dt><dd>{{ v.de_onde }}</dd>{% endif %}
-      {% if v.como %}<dt>Como preencher</dt><dd>{{ v.como }}</dd>{% endif %}
-      {% if v.exemplo %}<dt>Na Kiev</dt><dd class="exemplo">{{ v.exemplo }}</dd>{% endif %}
+      {% if v.de_onde %}<dt>De onde vem</dt><dd>{{ v.de_onde|enfase }}</dd>{% endif %}
+      {% if v.como %}<dt>Como preencher</dt><dd>{{ v.como|enfase }}</dd>{% endif %}
+      {% if v.exemplo %}<dt>Na Kiev</dt><dd class="exemplo">{{ v.exemplo|enfase }}</dd>{% endif %}
     </dl>
     {% if v.cuidado %}
-    <p class="cuidado"><b>Cuidado.</b> {{ v.cuidado }}</p>
+    <p class="cuidado"><b>Cuidado.</b> {{ v.cuidado|enfase }}</p>
     {% endif %}
   </article>
   {% endfor %}

@@ -10,7 +10,7 @@
 <span class="rotulo">Linha do resultado</span>
 <h1>{{ rotulo }}</h1>
 {% if verbete %}
-<p class="sub">{{ verbete.o_que }}</p>
+<p class="sub">{{ verbete.o_que|enfase }}</p>
 {% endif %}
 
 {% if linha_tabela %}
@@ -90,6 +90,13 @@
 </div>
 {% if formula.nota %}
 <p class="legenda-tab"><b>Vale saber.</b> {{ formula.nota }}</p>
+{% endif %}
+{% if setor %}
+<p style="margin:0 0 1.6rem">
+  <a class="botao principal"
+     href="/empreendimento/{{ emp.id }}/dados/custos/{{ setor.codigo }}?cenario={{ cenario.id }}">
+    Abrir a composição de {{ setor.nome|lower }}</a>
+</p>
 {% endif %}
 {% else %}
 <h2>Como o valor atualizado é calculado</h2>

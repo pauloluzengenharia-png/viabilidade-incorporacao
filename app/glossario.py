@@ -309,6 +309,13 @@ o lucro fechar e o caixa não.""", [
         de_onde="Prática do município.",
         como="Percentual sobre a parte paga em dinheiro. Digite 0,025 para 2,5%.",
         exemplo="0,025"),
+
+    Verbete("regularizacao_fundiaria", "Terreno — regularização fundiária", "R$",
+        o_que="O custo de deixar a matrícula em condição de receber a incorporação: retificação de área, georreferenciamento, desmembramento ou unificação, usucapião, baixa de ônus e hipoteca, certidões e as taxas de cartório de cada um desses atos.",
+        de_onde="Levantamento do jurídico sobre a matrícula, somado às propostas de topografia e de cartório. Quando o terreno vem por permuta, confira no contrato de quem é essa despesa — nem sempre é da incorporadora.",
+        como="Não é um valor solto: monte a composição no módulo **Dados › Custos › Regularização fundiária**, item a item, e a linha do resultado recebe a soma. Verba fechada entra como um item só, com o total.",
+        cuidado="Um terreno que parece limpo e não está é o atraso mais caro de um lançamento: sem matrícula regular não há registro de incorporação, e sem registro não há venda. Zero aqui deve ser uma conclusão do jurídico, não um campo que ninguém preencheu.",
+        exemplo="180.000,00 de retificação e georreferenciamento + 15.000,00 de certidões"),
 ])
 
 
@@ -333,9 +340,9 @@ milhões no estudo inteiro.""", [
         exemplo="0,00"),
 
     Verbete("despesas_comerciais", "Despesas comerciais", "R$",
-        o_que="Gastos de vender que não são comissão: material, evento, corretagem de apoio.",
+        o_que="Gastos de vender que não são comissão: material de venda, evento, corretagem de apoio.",
         de_onde="Orçamento comercial.",
-        como="Valor fixo total, não percentual.",
+        como="Composição no módulo **Dados › Custos › Despesas comerciais**. É valor, não percentual — a parte percentual da venda é a comissão, que tem linha própria.",
         exemplo="30.750,00"),
 
     Verbete("taxa_viabilizacao", "Taxa de administração — carteira", "% da receita SPE",
@@ -350,23 +357,37 @@ milhões no estudo inteiro.""", [
 # 7. Incorporação e marketing
 # =====================================================================
 INCORPORACAO = Secao("incorporacao", "Incorporação e marketing", """
-Despesas de valor fixo, decididas no lançamento. São as mais fáceis de
-preencher e as mais fáceis de esquecer de atualizar.""", [
+Cada um destes setores tem **módulo próprio de composição**: o valor da linha
+não é digitado, é a soma dos itens que você lançar em *Dados › Custos*. Um
+setor sem item nenhum vale zero no resultado — o que é diferente de custar
+zero, e é o erro mais comum aqui: a composição vazia não avisa que falta
+orçar.""", [
+    Verbete("legalizacao", "Incorporação — legalização", "R$",
+        o_que="Tudo o que se paga para o empreendimento existir legalmente, do protocolo do projeto ao habite-se: prefeitura, órgão ambiental, corpo de bombeiros, concessionárias de água, energia e esgoto, outorga onerosa quando houver, registro da incorporação e averbação da construção.",
+        de_onde="Tabela de taxas de cada órgão, mais as propostas dos despachantes e assessorias que conduzem os processos.",
+        como="Monte a composição no módulo **Dados › Custos › Legalização do empreendimento**, uma linha por licença ou taxa. A linha do resultado recebe a soma.",
+        cuidado="É diferente de *projetos*: projeto é o que o arquiteto e os calculistas cobram para desenhar; legalização é o que os órgãos cobram para aprovar. Lançar os dois no mesmo lugar esconde qual dos dois estourou.",
+        exemplo="Outorga 320.000,00 + taxas de aprovação 95.000,00 + registro de incorporação 48.000,00"),
+
     Verbete("decoracao", "Decoração", "R$",
         o_que="Apartamento decorado e ambientação do stand.",
-        de_onde="Orçamento de marketing.", como="Valor total.",
+        de_onde="Orçamento de marketing.",
+        como="Composição no módulo **Dados › Custos › Decoração**: mobiliário, projeto de interiores, enxoval, paisagismo. A linha recebe a soma.",
         exemplo="1.545.045,14"),
     Verbete("projetos_e_outros", "Incorporação — projetos e outros", "R$",
-        o_que="Projetos, aprovações, taxas, assessorias — o custo de viabilizar a incorporação.",
-        de_onde="Orçamento de incorporação.", como="Valor total.",
+        o_que="O que os projetistas e consultores cobram: arquitetura, estrutura, instalações, fundações, acústica, sondagem, assessorias e consultorias.",
+        de_onde="Contratos e propostas de cada projetista.",
+        como="Composição no módulo **Dados › Custos › Projetos e outros**, uma linha por contrato. A linha recebe a soma.",
         exemplo="2.899.156,99"),
     Verbete("marketing_stand", "Marketing — stand", "R$",
         o_que="Construção e operação do stand de vendas.",
-        de_onde="Orçamento de marketing.", como="Valor total; zero se a venda usa estrutura existente.",
+        de_onde="Orçamento de marketing.",
+        como="Composição no módulo **Dados › Custos › Marketing — stand**: obra do stand, mobiliário, operação mensal, desmobilização. Fica em zero, sem item nenhum, quando a venda usa estrutura existente.",
         exemplo="0,00"),
     Verbete("marketing_propaganda", "Marketing — propaganda", "R$",
         o_que="Mídia, agência e campanha.",
-        de_onde="Orçamento de marketing.", como="Valor total.",
+        de_onde="Orçamento de marketing.",
+        como="Composição no módulo **Dados › Custos › Marketing — propaganda**: fee de agência, produção, mídia paga, brindes e eventos.",
         exemplo="1.545.045,14"),
     Verbete("outras_entradas", "Outras receitas administrativas", "R$",
         o_que="Entradas que não vêm de venda de unidade: rendimento de aplicação, recuperação de despesa.",
@@ -526,9 +547,11 @@ LINHA_AJUDA = {
     "(-) Terreno - Permuta": "terreno_permuta",
     "(-) Terreno - Pagamento": "terreno_parcelas",
     "(-) Terreno - Outros": "terreno_registro_perc",
+    "(-) Terreno - Regularização fundiária": "regularizacao_fundiaria",
     "(-) Obra - Custo Raso": "custo_raso",
     "(-) Taxa de Administração - Obra": "taxa_adm_obra",
     "(-) Taxa de Administração - Carteira": "taxa_viabilizacao",
+    "(-) Incorporação - Legalização": "legalizacao",
     "(-) Incorporação - Decoração": "decoracao",
     "(-) Incorporação - Outros": "projetos_e_outros",
     "(-) Marketing - Stand": "marketing_stand",

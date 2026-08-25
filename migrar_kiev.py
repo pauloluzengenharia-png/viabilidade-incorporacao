@@ -482,8 +482,22 @@ def criar_cenario(s, emp: int, nome: str, tipo: str, principal: bool,
     """, e=emp, n=nome, t=tipo, p=principal)[0]["id"]
 
     q(s, "DELETE FROM premissa WHERE cenario_id = :c", c=cen)
+    q(s, "DELETE FROM composicao_item WHERE cenario_id = :c", c=cen)
     valores = dict(PREMISSAS_COMUNS, preco_m2_estoque=preco_m2)
+    setores = {r["codigo"] for r in q(s, "SELECT codigo FROM setor_custo")}
     for chave, valor in valores.items():
+        # Setor de custo não vira premissa escalar: vira composição de um item,
+        # com a descrição dizendo de onde o valor veio. O total é o mesmo — o
+        # que muda é passar a existir um lugar para detalhá-lo.
+        if chave in setores:
+            if valor:
+                q(s, """INSERT INTO composicao_item
+                          (cenario_id, setor, ordem, descricao, valor, observacao)
+                        VALUES (:c, :s, 1,
+                                'Valor único, como veio da planilha de origem', :v,
+                                'Substitua por itens quando revisar este setor.')""",
+                  c=cen, s=chave, v=abs(valor))
+            continue
         q(s, """INSERT INTO premissa (cenario_id, chave, valor, unidade, origem)
                 VALUES (:c, :k, :v, :u, 'migrado da planilha')""",
           c=cen, k=chave, v=valor, u=UNIDADE_DA_PREMISSA.get(chave, "moeda"))

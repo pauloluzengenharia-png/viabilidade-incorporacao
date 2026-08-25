@@ -23,10 +23,10 @@
     <details class="ajuda so-marca">
       <summary title="O que é: {{ v.titulo }}" aria-label="O que é: {{ v.titulo }}"></summary>
       <div class="texto">
-        <b>{{ v.titulo }}.</b> {{ v.o_que }}
-        {%- if v.como %} <b>Como preencher:</b> {{ v.como }}{% endif %}
+        <b>{{ v.titulo }}.</b> {{ v.o_que|enfase }}
+        {%- if v.como %} <b>Como preencher:</b> {{ v.como|enfase }}{% endif %}
         {%- if v.exemplo %} <b>Na Kiev:</b> {{ v.exemplo }}{% endif %}
-        {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado }}{% endif %}
+        {%- if v.cuidado %} <b>Cuidado:</b> {{ v.cuidado|enfase }}{% endif %}
       </div>
     </details>
     {% endif %}
