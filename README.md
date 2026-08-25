@@ -15,6 +15,21 @@ Na planilha essas três coisas eram, respectivamente, a coluna `E`, as colunas
 onde é a fronteira. Aqui a fronteira é uma data (`empreendimento.mes_corte_realizado`)
 e um parâmetro de consulta.
 
+## O que não entra no repositório
+
+`dados/` está inteiro no `.gitignore`. Ali moram as três coisas que são
+informação da empresa e não código:
+
+| arquivo | o que é |
+|---|---|
+| `kiev.xlsx` | a planilha de origem |
+| `kiev.json` | parâmetros da SPE: viabilidade aprovada, contas de mútuo, premissas |
+| `kiev_esperado.json` | os valores que a planilha calculava, usados pelos testes |
+| `ACHADOS-KIEV.md` | os números concretos por trás de cada decisão de modelagem |
+
+Sem eles o código roda e os testes são **pulados**, não quebrados. Copie a pasta
+`dados/` do pacote entregue para dentro do clone antes de migrar.
+
 ## Rodar local
 
 ```bash
@@ -119,28 +134,28 @@ Três regras do Sienge que estão codificadas ali e custam caro a redescobrir:
 ## O que o sistema faz diferente da planilha, de propósito
 
 Cada item abaixo é um caso em que reproduzir a planilha seria reproduzir um erro.
-Todos estão cobertos por teste.
+Todos estão cobertos por teste. Os valores concretos que motivaram cada decisão
+estão em `dados/ACHADOS-KIEV.md`, que não é versionado.
 
-- **A obra desembolsa o custo inteiro.** Na planilha, a linha 37 da projeção é um
-  conjunto de valores colados, desligado do cronograma — mexer no cronograma não
-  mudava o fluxo. Aqui o desembolso é a curva física aplicada ao custo, e fecha.
-- **Um orçamento de obra só.** A planilha usava custo de R$ 104,0 M com a curva de
-  um orçamento de R$ 70,6 M de outro empreendimento. Agora o total e a curva
-  pertencem ao mesmo `orcamento_obra`.
-- **A TIR não finge existir.** A planilha reporta 163,7% a partir de uma série com
-  R$ 1,66 M deslocados à mão para uma célula "início". Sem esse ajuste o fluxo
-  troca de sinal várias vezes. O sistema devolve `NULL` quando não há raiz real e
-  publica a MTIR ao lado.
-- **O terreno realizado é R$ 1.863.762,81, não R$ 3.213.762,81.** A célula `J35`
-  da planilha guarda um SUMIFS cujo cache ficou R$ 1,35 M acima da própria fonte
-  e nunca foi recalculado.
-- **A comissão realizada respeita a data de corte.** A planilha soma a comissão de
-  todo contrato assinado, inclusive um de 03/08/2026 dentro de um realizado
-  fechado em 31/07/2026 (R$ 47.190,48 que ainda não aconteceram).
-- **Unidade fora do VGV precisa de motivo.** `SALA 1 - G 02` e `SALA 2 - G 02`
-  existem no Sienge e não estavam na aba Comercial; `ROOFTOP` estava no VGV sem
-  cadastro no Sienge. Agora isso é uma flag com justificativa, não uma diferença
-  invisível entre duas abas.
+- **A obra desembolsa o custo inteiro.** Na planilha, a linha do desembolso na
+  projeção é um conjunto de valores colados, desligado do cronograma — mexer no
+  cronograma não mudava o fluxo. Aqui o desembolso é a curva física aplicada ao
+  custo, e fecha.
+- **Um orçamento de obra só.** A planilha usava o custo de uma versão do
+  orçamento com a curva de outra, vinda de outro empreendimento. Agora o total e
+  a curva pertencem ao mesmo `orcamento_obra`.
+- **A TIR não finge existir.** A planilha reporta uma TIR alta a partir de uma
+  série com valores deslocados à mão para uma célula "início". Sem esse ajuste o
+  fluxo troca de sinal várias vezes. O sistema devolve `NULL` quando não há raiz
+  real e publica a MTIR ao lado.
+- **O realizado vem da fonte, não do cache do Excel.** Uma das células de SUMIFS
+  guardava um resultado desatualizado em relação aos próprios lançamentos. O
+  sistema soma os movimentos; a planilha mostrava o cache.
+- **A comissão realizada respeita a data de corte.** A planilha soma a comissão
+  de todo contrato assinado, inclusive os posteriores ao fechamento do mês.
+- **Unidade fora do VGV precisa de motivo.** O cadastro do Sienge e a lista que a
+  planilha usava para o VGV não eram a mesma lista, e a diferença sumia entre
+  duas abas. Agora é uma flag com justificativa.
 - **A tabela de venda tem de fechar 100%** e **a curva física de cada atividade
   tem de somar 100%** — as duas travas são `CHECK`/trigger no banco.
 - **Resultado ≠ fluxo.** Somar as colunas mensais não dá a linha do DRE: o fluxo
@@ -148,51 +163,8 @@ Todos estão cobertos por teste.
   passa por caixa) e as parcelas que caem depois. São duas tabelas.
 
 Uma diferença é só de arredondamento e não vale correção: a planilha calcula
-"outras despesas administrativas" com `1,5001661%` — dígito espúrio de uma divisão
-feita uma vez. O sistema usa 1,5% redondo, e o lucro fica R$ 173 acima.
-
-## Correção monetária da carteira
-
-A planilha projeta tudo em valores nominais: uma parcela de 2031 entra no fluxo
-com o poder de compra de hoje, apesar de os contratos terem indexador no Sienge.
-Aqui a correção existe, é premissa do cenário e vem **desligada por padrão** —
-com ela desligada o sistema reproduz a planilha, que é o que os testes conferem.
-
-Para ligar, o cenário recebe dois índices e uma taxa projetada:
-
-| premissa | o que é |
-|---|---|
-| `cenario.indice_ate_chaves` | índice das parcelas durante a obra — tipicamente `INCC-DI` |
-| `cenario.indice_apos_chaves` | índice do período de repasse — `IGP-M` ou `IPCA` |
-| `premissa.indice_projetado_aa` | taxa anual usada nos meses que ainda não têm série publicada |
-| `premissa.corrigir_custo_obra` | 1 (padrão) corrige também o desembolso da obra |
-
-A série histórica tem precedência sobre a taxa projetada: onde a FGV já publicou,
-é o número dela que vale. O INCC-DI de 2026 (jan a jul) já vem carregado na
-migration 008 — jul/2026 fechou em 0,61% no mês e **6,4594% em 12 meses**, que é
-de onde sai a sugestão de 6,5% a.a. para a projeção.
-
-Duas decisões de modelagem que valem explicar:
-
-**A correção fica em linha própria**, `(+) Correção monetária da carteira`, em vez
-de inflar "venda de imóveis". Assim dá para ver quanto do caixa vem de preço e
-quanto vem de índice, e o DRE continua comparável com a viabilidade nominal.
-
-**O índice corrige os dois lados.** Corrigir só a parcela do cliente e deixar a
-obra em moeda de hoje inventa lucro — o INCC que reajusta a parcela é o mesmo que
-encarece o concreto. Por isso `corrigir_custo_obra` vem ligado.
-
-E o resultado disso, na Kiev, é o argumento a favor da funcionalidade:
-
-| | exposição máxima de caixa |
-|---|---|
-| projeção nominal (como a planilha) | −R$ 60,2 M |
-| com INCC nos dois lados | **−R$ 65,6 M** |
-
-A projeção nominal **subestima a necessidade de aporte em R$ 5,4 M**. O custo
-infla durante a obra, cedo; a correção da carteira só entra depois, diluída em 60
-parcelas e nas chaves. Quem dimensiona o aporte pelo número nominal se planeja
-para menos do que vai precisar.
+"outras despesas administrativas" com um percentual de sete casas, resultado de
+uma divisão feita uma vez. O sistema usa o percentual redondo.
 
 ## O que ainda não existe
 

@@ -26,6 +26,8 @@ import datetime as dt
 import sys
 from collections import defaultdict
 
+import pathlib
+
 import openpyxl
 
 from app.db import Sessao, aplicar_migrations, q
@@ -35,7 +37,27 @@ from app.importadores.sienge import (normalizar_contratos, normalizar_movimentos
                                      normalizar_unidades)
 
 ARQUIVO = sys.argv[1] if len(sys.argv) > 1 else "dados/kiev.xlsx"
+PARAMETROS = sys.argv[2] if len(sys.argv) > 2 else "dados/kiev.json"
 HOJE = dt.date(2026, 8, 25)
+
+
+def carregar_parametros() -> dict:
+    """
+    Os números da SPE — viabilidade aprovada, empresas do grupo, premissas —
+    moram em `dados/kiev.json`, fora do controle de versão. O repositório é
+    código; informação financeira da empresa não entra nele.
+    """
+    import json
+    caminho = pathlib.Path(PARAMETROS)
+    if not caminho.exists():
+        raise SystemExit(
+            f"não encontrei {caminho}. Este arquivo tem os parâmetros da SPE "
+            "(viabilidade aprovada, contas de mútuo, premissas dos cenários) e "
+            "fica fora do git de propósito. Copie-o para dados/ antes de migrar.")
+    return json.loads(caminho.read_text(encoding="utf-8"))
+
+
+PARAMS = carregar_parametros()
 
 
 def aba_como_dicts(wb, nome: str, linha_cabecalho: int = 1) -> list[dict]:
@@ -155,16 +177,7 @@ def semear_contas(s, wb) -> int:
 # empreendimento — são movimento de caixa entre CNPJs. Na planilha vivem nas
 # linhas 210-217 do fluxo mensal, fora do DRE. Sem esta classificação, 159
 # lançamentos (R$ 2,6 M) ficavam pendurados em "A CLASSIFICAR".
-INTERCOMPANY = [
-    ("1020357", "MM Gestão Imobiliária Ltda"),
-    ("2011457", "MM Gestão Imobiliária Ltda"),
-    ("1020326", "Lisse Incorporadora Ltda"),
-    ("1020304", "Barcelona Incorporadora Ltda"),
-    ("2011404", "Barcelona Incorporadora Ltda"),
-    ("2011458", "SPE Varsovia Incorporadora Ltda"),
-    ("1020333", "M M Imobiliaria Unipessoal Ltda"),
-    ("1020108", "Débitos com parceiros"),
-]
+INTERCOMPANY = [tuple(x) for x in PARAMS["intercompany"]]
 
 
 def classificar_intercompany(s) -> int:
@@ -187,28 +200,7 @@ def classificar_intercompany(s) -> int:
 # VIABILIDADE coluna N, em R$ mil. As premissas do estudo original não
 # existem mais em lugar nenhum: só o resultado sobreviveu. Por isso o cenário
 # orçado guarda o RESULTADO, e não entradas para o motor reprocessar.
-ORCADO_MIL = {
-    "VGV": 102_900.0,
-    "(-) Comissão s/ vendas": -5_670.0,
-    "RECEITA C/ VENDAS SPE": 97_230.0,
-    "(-) Impostos": -4_375.35,
-    "(-) Distratos": 0.0,
-    "(-) Despesas comerciais": -30.75,
-    "RECEITA LÍQUIDA": 92_823.9,
-    "(-) Terreno - Permuta": 0.0,
-    "(-) Terreno - Pagamento": -3_450.0,
-    "(-) Terreno - Outros": -86.25,
-    "(-) Obra - Custo Raso": -45_500.0,
-    "(-) Taxa de Administração - Obra": -8_190.0,
-    "(-) Taxa de Administração - Carteira": -1_944.6,
-    "(-) Incorporação - Decoração": -777.84,
-    "(-) Incorporação - Outros": -1_680.0,
-    "(-) Marketing - Stand": -1_000.0,
-    "(-) Marketing - Propaganda": -630.0,
-    "(-) Outras despesas administrativas": -910.0,
-    "(+) Outras receitas administrativas": 0.02084,
-    "LUCRO": 22_629.24,
-}
+ORCADO_MIL = PARAMS["orcado_mil"]
 
 
 def congelar_orcado(s, cenario_id: int) -> int:
@@ -242,6 +234,7 @@ def congelar_orcado(s, cenario_id: int) -> int:
 # 2. empreendimento
 # =====================================================================
 def criar_empreendimento(s, wb) -> int:
+    E = PARAMS["empreendimento"]
     com = wb["Comercial"]
     area_priv = sum(float(com.cell(r, 3).value or 0) for r in range(6, 206))
 
@@ -249,12 +242,17 @@ def criar_empreendimento(s, wb) -> int:
         INSERT INTO empreendimento (sienge_enterprise_id, sienge_company_id, nome,
             area_construida, area_privativa, data_lancamento,
             data_entrega_prevista, mes_corte_realizado)
-        VALUES (26003, 26, 'SPE KIEV — Doca Sede', 22909.46, :ap,
-                DATE '2026-07-01', DATE '2031-03-31', DATE '2026-07-31')
+        VALUES (:sid, :cid, :nome, :ac, :ap,
+                CAST(:dl AS date), CAST(:de AS date), CAST(:mc AS date))
         ON CONFLICT (sienge_enterprise_id) DO UPDATE
            SET area_privativa = EXCLUDED.area_privativa
         RETURNING id
-    """, ap=round(area_priv, 2))[0]["id"]
+    """, ap=round(area_priv, 2), **{
+        "sid": E["sienge_enterprise_id"], "cid": E["sienge_company_id"],
+        "nome": E["nome"], "ac": E["area_construida"],
+        "dl": E["data_lancamento"], "de": E["data_entrega_prevista"],
+        "mc": E["mes_corte_realizado"],
+    })[0]["id"]
     s.commit()
     return emp
 
@@ -263,10 +261,8 @@ def criar_empreendimento(s, wb) -> int:
 # 3. tabelas de venda
 # =====================================================================
 def criar_tabelas_venda(s, emp: int) -> None:
-    for nome, t in [
-        ("Padrão",     dict(com=0.06, ato=0.04, men=0.35, anu=0.0, sem=0.35, uni=0.0, cha=0.20, n=60)),
-        ("Investidor", dict(com=0.00, ato=0.00, men=1.00, anu=0.0, sem=0.00, uni=0.0, cha=0.00, n=12)),
-    ]:
+    for t in PARAMS["tabelas_venda"]:
+        nome = t["nome"]
         q(s, """
             INSERT INTO tabela_venda (empreendimento_id, nome, perc_comissao,
                 perc_ato, perc_mensais, perc_anuais, perc_semestrais, perc_unica,
@@ -279,8 +275,9 @@ def criar_tabelas_venda(s, emp: int) -> None:
                    perc_semestrais = EXCLUDED.perc_semestrais,
                    perc_unica = EXCLUDED.perc_unica, perc_chaves = EXCLUDED.perc_chaves,
                    qtd_mensais = EXCLUDED.qtd_mensais
-        """, e=emp, n=nome, com=t["com"], ato=t["ato"], men=t["men"], anu=t["anu"],
-            sem=t["sem"], uni=t["uni"], cha=t["cha"], q=t["n"])
+        """, e=emp, n=nome, com=t["comissao"], ato=t["ato"], men=t["mensais"],
+            anu=t["anuais"], sem=t["semestrais"], uni=t["unica"],
+            cha=t["chaves"], q=t["qtd_mensais"])
     s.commit()
 
 
@@ -441,17 +438,7 @@ def criar_orcamento(s, emp: int, wb, custo_raso: float) -> int:
 # =====================================================================
 # 6. cenários
 # =====================================================================
-PREMISSAS_COMUNS = {
-    "ret": 0.045, "distratos": 0.0, "despesas_comerciais": 30_750.0,
-    "terreno_registro_perc": 0.025, "taxa_adm_obra": 0.10,
-    "taxa_viabilizacao": 0.05, "decoracao": 1_545_045.14,
-    "projetos_e_outros": 2_899_156.992, "marketing_stand": 0.0,
-    "marketing_propaganda": 1_545_045.14, "outras_desp_adm_perc": 0.015,
-    "outras_entradas": 117.95, "tma_anual": 0.18,
-    "financiamento_limite": 0.0, "financiamento_juros_aa": 0.22,
-    "financiamento_prazo_amort": 6, "financiamento_gatilho_obra": 0.20,
-    "meses_pos_chaves": 6,
-}
+PREMISSAS_COMUNS = PARAMS["premissas"]
 UNIDADE_DA_PREMISSA = {
     "ret": "percentual", "distratos": "percentual",
     "despesas_comerciais": "moeda", "terreno_registro_perc": "percentual",
@@ -464,7 +451,7 @@ UNIDADE_DA_PREMISSA = {
     "financiamento_gatilho_obra": "percentual", "meses_pos_chaves": "meses",
     "preco_m2_estoque": "r$/m2",
 }
-TERRENO = [2_200_000, 350_000, 350_000, 300_000, 250_000]
+TERRENO = PARAMS["terreno_parcelas"]
 
 
 def criar_cenario(s, emp: int, nome: str, tipo: str, principal: bool,
@@ -543,32 +530,32 @@ def main() -> int:
         aviso = f"  ({len(r.get('avisos', []))} aviso(s))" if r.get("avisos") else ""
         print(f"{fonte:>12}: {r['gravadas']}/{r['lidas']} gravadas{aviso}")
 
-    orc = criar_orcamento(s, emp, wb, 104_049_038.53)
+    orc = criar_orcamento(s, emp, wb, PARAMS["custo_raso"])
     print(f"orçamento de obra #{orc}")
 
     cenarios = {}
-    for nome, tipo, principal, preco, usar_tab, preco_inv, col in [
-        ("realista",   "projecao", True,  18_228.664532617702, True,  3_704_512.50, 10),
-        ("otimista",   "projecao", False, 18_000.0,            False, 3_624_952.50, 4),
-        ("pessimista", "projecao", False, 17_848.092006697818, False, 3_624_952.50, 16),
-    ]:
-        cid = criar_cenario(s, emp, nome, tipo, principal, preco, usar_tab,
-                            preco_inv, ler_plano(wb, col))
+    for c in PARAMS["cenarios"]:
+        cid = criar_cenario(s, emp, c["nome"], "projecao", c["principal"],
+                            c["preco_m2"], c["usar_tabela"],
+                            c["preco_investidor"], ler_plano(wb, c["coluna_plano"]))
+        nome = c["nome"]
         cenarios[nome] = cid
         print(f"cenário {nome}: #{cid}")
 
     # a viabilidade orçada (VIABILIDADE coluna N), congelada
+    principal = next(c for c in PARAMS["cenarios"] if c["principal"])
     cid_orc = criar_cenario(s, emp, "orçada no lançamento", "orcado", False,
-                            18_228.664532617702, True, 3_704_512.50,
-                            ler_plano(wb, 10))
+                            principal["preco_m2"], principal["usar_tabela"],
+                            principal["preco_investidor"],
+                            ler_plano(wb, principal["coluna_plano"]))
     cenarios["orcado"] = cid_orc
     rodada_orc = congelar_orcado(s, cid_orc)
     print(f"cenário orçado: #{cid_orc} (rodada congelada #{rodada_orc})")
 
     from app.servico import rodar_e_persistir
-    for nome in ("realista", "otimista", "pessimista"):
-        r = rodar_e_persistir(s, cenarios[nome], executada_por="migração")
-        print(f"  rodada de {nome}: #{r}")
+    for c in PARAMS["cenarios"]:
+        r = rodar_e_persistir(s, cenarios[c["nome"]], executada_por="migração")
+        print(f"  rodada de {c['nome']}: #{r}")
 
     print()
     print("A migração deixa os cenários em VALORES NOMINAIS, que é como a planilha")

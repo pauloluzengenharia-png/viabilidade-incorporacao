@@ -16,9 +16,9 @@ SET search_path = viab, public;
 -- ---------------------------------------------------------------------
 CREATE TABLE empreendimento (
     id                  bigserial PRIMARY KEY,
-    sienge_enterprise_id integer UNIQUE,          -- Unidades.enterpriseId (26003)
+    sienge_enterprise_id integer UNIQUE,          -- Unidades.enterpriseId
     sienge_company_id   integer,                  -- Fin_Obra.companyId    (26)
-    nome                text NOT NULL,            -- 'SPE KIEV - DOCA SEDE'
+    nome                text NOT NULL,            -- razão social da SPE
     cnpj                text,
     area_construida     numeric(14,2) NOT NULL,   -- SIMULAÇÕES L57
     area_privativa      numeric(14,2) NOT NULL,   -- L58 = Σ áreas das unidades

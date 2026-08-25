@@ -3,5 +3,6 @@ __pycache__/
 .venv/
 .env
 .pytest_cache/
-dados/*.xlsx
+# o repositório é código; dado da empresa não entra nele
+dados/*
 !dados/.gitkeep
