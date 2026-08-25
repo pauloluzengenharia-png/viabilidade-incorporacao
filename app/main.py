@@ -85,6 +85,22 @@ def inicio(request: Request, s: Session = Depends(sessao)):
                                       {"empreendimentos": emps})
 
 
+def cenario_desatualizado(s: Session, cenario_id: int) -> bool:
+    """A última rodada foi calculada com as premissas que estão valendo agora?"""
+    from .servico import _hash
+    ultima = q(s, """SELECT hash_entradas, congelada FROM rodada
+                      WHERE cenario_id = :c ORDER BY executada_em DESC LIMIT 1""",
+               c=cenario_id)
+    if not ultima:
+        return True
+    if ultima[0]["congelada"]:
+        return False          # congelado não recalcula, por definição
+    try:
+        return _hash(carregar_entradas(s, cenario_id)) != ultima[0]["hash_entradas"]
+    except Exception:
+        return True
+
+
 def _empreendimento(s: Session, emp_id: int) -> dict:
     r = q(s, "SELECT * FROM empreendimento WHERE id = :e", e=emp_id)
     if not r:
@@ -125,6 +141,9 @@ def tela_cenarios(emp_id: int, request: Request, s: Session = Depends(sessao)):
     emp = _empreendimento(s, emp_id)
     cenarios = q(s, """
         SELECT c.id, c.nome, c.tipo, c.principal, c.mes_base,
+               c.indice_ate_chaves, c.indice_apos_chaves,
+               (SELECT valor FROM premissa
+                 WHERE cenario_id = c.id AND chave = 'indice_projetado_aa') AS indice_aa,
                i.vgv, i.receita_liquida, i.lucro, i.margem, i.custo_m2_privativa,
                i.preco_m2_vgv, i.exposicao_maxima, i.mes_exposicao, i.vpl,
                i.tir_anual, i.mtir_anual, i.aporte_necessario, r.executada_em,
@@ -150,9 +169,16 @@ def tela_cenarios(emp_id: int, request: Request, s: Session = Depends(sessao)):
         ("VPL", "vpl", "moeda_m"), ("TIR", "tir_anual", "perc"),
         ("MTIR", "mtir_anual", "perc"),
     ]
+    # o indicador guardado vale para as premissas de quando a rodada correu.
+    # Se alguém mexeu depois, a tela precisa dizer — senão mostra o índice novo
+    # ao lado de um número calculado sem ele.
+    for c in cenarios:
+        c["desatualizado"] = cenario_desatualizado(s, c["id"])
+
     return templates.TemplateResponse(request, "cenarios.html", {
         "emp": emp, "cenarios": cenarios,
         "metricas": metricas, "aba": "cenarios",
+        "algum_desatualizado": any(c["desatualizado"] for c in cenarios),
     })
 
 
@@ -199,7 +225,7 @@ def tela_fluxo(emp_id: int, request: Request, cenario: Optional[int] = None,
         a["saldo"] = l["saldo"]
 
     return templates.TemplateResponse(request, "fluxo.html", {
-        "emp": emp, "cenarios": cenarios,
+        "emp": emp, "cenarios": cenarios, "premissas": entradas.premissas,
         "escolhido": escolhido, "serie": serie, "por_ano": sorted(por_ano.items()),
         "ind": ind, "dre": dre, "aba": "fluxo",
         "grafico_mov": _grafico_barras(serie),

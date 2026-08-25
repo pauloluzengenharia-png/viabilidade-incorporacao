@@ -21,6 +21,17 @@
   <noscript><button type="submit">Trocar</button></noscript>
 </form>
 
+{% if not premissas.corrige_carteira %}
+<div class="aviso">
+  <span><b>Projeção em valores nominais.</b> Este cenário não corrige a carteira
+  nem o custo da obra por índice — é o que a planilha fazia. Numa carteira que
+  se estende por anos isso subestima a receita <em>e</em> a necessidade de aporte,
+  porque o custo infla durante a obra e a correção da parcela só entra depois.
+  Para ligar, defina o índice do cenário: INCC-DI até as chaves, IGP-M ou IPCA
+  no repasse.</span>
+</div>
+{% endif %}
+
 <dl class="painel">
   <div class="cel neg"><dt>Exposição máxima</dt>
     <dd>{{ ind.exposicao_maxima|milhoes }}<small>R$ M · {{ ind.mes_exposicao|mes }}</small></dd></div>

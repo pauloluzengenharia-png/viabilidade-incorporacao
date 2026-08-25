@@ -8,6 +8,16 @@
   preço do estoque, a velocidade de vendas e a tabela de parcelamento.
 </p>
 
+{% if algum_desatualizado %}
+<form class="aviso" method="post" action="/empreendimento/{{ emp.id }}/recalcular"
+      style="align-items:center">
+  <span style="flex:1"><b>Premissas mudaram desde o último cálculo.</b>
+    Os números abaixo ainda são os da rodada anterior — os cenários marcados
+    precisam ser recalculados.</span>
+  <button class="principal" type="submit">Recalcular agora</button>
+</form>
+{% endif %}
+
 <div class="rolagem">
 <table>
   <thead>
@@ -18,6 +28,7 @@
         {{ c.nome }}
         {% if c.tipo == 'orcado' %}<br><span class="marca-c">congelado</span>
         {% elif c.principal %}<br><span class="marca-p">principal</span>{% endif %}
+        {% if c.desatualizado %}<br><span class="marca-a">desatualizado</span>{% endif %}
       </th>
       {% endfor %}
     </tr>
@@ -30,6 +41,20 @@
     <tr>
       <td>Unidades no plano de vendas</td>
       {% for c in cenarios %}<td class="n">{{ c.unidades_plano or '—' }}</td>{% endfor %}
+    </tr>
+    <tr>
+      <td>Correção da carteira</td>
+      {% for c in cenarios %}
+      <td class="n">
+        {%- if c.indice_ate_chaves -%}
+          {{ c.indice_ate_chaves }} até as chaves<br>
+          <span class="fraco">{{ c.indice_apos_chaves or '—' }} depois ·
+            {{ c.indice_aa|percentual }} a.a. projetado</span>
+        {%- else -%}
+          <span class="marca-a">nominal</span>
+        {%- endif -%}
+      </td>
+      {% endfor %}
     </tr>
     {% for rotulo, campo, formato in metricas %}
     <tr class="{{ 'total' if campo in ('lucro','margem') }}">

@@ -190,6 +190,20 @@ def carregar_premissas(s: Session, cenario: dict, emp: dict) -> Premissas:
     if parcelas:
         p.terreno_parcelas = [float(x["valor"]) for x in parcelas]
 
+    # correção monetária: os índices são do cenário, a série é global
+    p.indice_ate_chaves = cenario.get("indice_ate_chaves")
+    p.indice_apos_chaves = cenario.get("indice_apos_chaves")
+    p.indice_projetado_aa = v.get("indice_projetado_aa", 0.0)
+    p.corrigir_custo_obra = bool(v.get("corrigir_custo_obra", 1.0))
+    if p.corrige_carteira:
+        usados = [c for c in (p.indice_ate_chaves, p.indice_apos_chaves) if c]
+        serie: dict[str, dict[date, float]] = {}
+        for l in q(s, """SELECT indice_codigo, mes, variacao FROM indice_mensal
+                          WHERE indice_codigo = ANY(:cods) ORDER BY mes""",
+                   cods=usados):
+            serie.setdefault(l["indice_codigo"], {})[l["mes"]] = float(l["variacao"])
+        p.serie_indice = serie
+
     preco = q(s, """SELECT * FROM preco_cenario
                      WHERE cenario_id = :c""", c=cenario["id"])
     for pr in preco:

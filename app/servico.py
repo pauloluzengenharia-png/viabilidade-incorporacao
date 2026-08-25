@@ -30,8 +30,12 @@ def _hash(e: EntradasCenario) -> str:
             return o.value
         return str(o)
 
+    # a série de índices sai daqui porque tem data como CHAVE de dicionário, e
+    # json.dumps não aceita isso; ela entra logo abaixo, já serializada
+    premissas = {k: v for k, v in asdict(e.premissas).items() if k != "serie_indice"}
+
     bruto = json.dumps({
-        "premissas": asdict(e.premissas),
+        "premissas": premissas,
         "tabela": asdict(e.tabela),
         "unidades": [asdict(u) for u in e.unidades],
         "obra": {"custo": e.obra.custo_raso,
@@ -41,6 +45,13 @@ def _hash(e: EntradasCenario) -> str:
                                 for a in e.obra.atividades]},
         "plano": [asdict(p) for p in e.plano],
         "receb": {k.isoformat(): v for k, v in sorted(e.receb_vendidos.items())},
+        "correcao": {
+            "ate_chaves": e.premissas.indice_ate_chaves,
+            "apos_chaves": e.premissas.indice_apos_chaves,
+            "projetado_aa": e.premissas.indice_projetado_aa,
+            "serie": {cod: {m.isoformat(): val for m, val in sorted(s_.items())}
+                      for cod, s_ in sorted(e.premissas.serie_indice.items())},
+        },
     }, default=serial, sort_keys=True)
     return hashlib.sha256(bruto.encode()).hexdigest()[:32]
 
@@ -115,6 +126,8 @@ LINHA_DE_CODIGO = {
     "DECOR": "(-) Incorporação - Decoração", "PROJ": "(-) Incorporação - Outros",
     "STAND": "(-) Marketing - Stand", "PROP": "(-) Marketing - Propaganda",
     "OUTRAS_ADM": "(-) Outras despesas administrativas",
+    "CORRECAO": "(+) Correção monetária da carteira",
+    "CORRECAO_OBRA": "(-) Correção monetária da obra",
     "FIN_CAPT": "(+) Receitas c/ financiamento",
     "FIN_AMORT": "(-) Amortização de financiamento",
     "FIN_JUROS": "(-) Juros s/ financiamento",

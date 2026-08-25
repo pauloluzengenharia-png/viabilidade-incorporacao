@@ -224,6 +224,16 @@ def congelar_orcado(s, cenario_id: int) -> int:
         q(s, """INSERT INTO resultado_projetado (rodada_id, linha_dre, valor, ordem)
                 VALUES (:r, :l, :v, :o)""",
           r=rodada, l=rotulo, v=round(ORCADO_MIL.get(rotulo, 0.0) * 1000, 2), o=ordem)
+
+    # os indicadores do orçado também são digitados: o estudo original não
+    # existe mais para ser reprocessado, só o resultado que foi aprovado
+    vgv = ORCADO_MIL["VGV"] * 1000
+    rl = ORCADO_MIL["RECEITA LÍQUIDA"] * 1000
+    lucro = ORCADO_MIL["LUCRO"] * 1000
+    q(s, "DELETE FROM indicador WHERE rodada_id = :r", r=rodada)
+    q(s, """INSERT INTO indicador (rodada_id, vgv, receita_liquida, lucro, margem)
+            VALUES (:r, :vgv, :rl, :lucro, :m)""",
+      r=rodada, vgv=vgv, rl=rl, lucro=lucro, m=round(lucro / rl, 6))
     s.commit()
     return rodada
 
@@ -559,6 +569,19 @@ def main() -> int:
     for nome in ("realista", "otimista", "pessimista"):
         r = rodar_e_persistir(s, cenarios[nome], executada_por="migração")
         print(f"  rodada de {nome}: #{r}")
+
+    print()
+    print("A migração deixa os cenários em VALORES NOMINAIS, que é como a planilha")
+    print("projetava — é assim que os 52 testes conferem linha a linha com ela.")
+    print("Para ligar a correção monetária no cenário realista:")
+    print()
+    print("  UPDATE viab.cenario SET indice_ate_chaves='INCC-DI',")
+    print("         indice_apos_chaves='IGP-M' WHERE nome='realista';")
+    print("  INSERT INTO viab.premissa (cenario_id, chave, valor, unidade, origem)")
+    print("  SELECT id, 'indice_projetado_aa', 0.065, 'percentual', 'INCC-DI 12m jul/2026'")
+    print("    FROM viab.cenario WHERE nome='realista';")
+    print()
+    print("Depois clique em Recalcular na tela de cenários.")
 
     s.close()
     return emp

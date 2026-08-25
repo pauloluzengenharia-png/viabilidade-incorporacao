@@ -315,6 +315,28 @@ def recebiveis_estoque(coortes: Iterable[Coorte], tabela: TabelaVenda,
     return fluxo
 
 
+def fatores_correcao(p: Premissas, meses: list[date],
+                     mes_chaves: Optional[date] = None) -> dict[date, float]:
+    """
+    Fator acumulado de correção monetária, mês a mês, a partir do mês base.
+
+    Todo preço no modelo está em moeda de hoje — tanto a tabela do estoque
+    quanto o saldo que o Sienge devolve. Então a correção acumula do mês base
+    até o mês do pagamento, e não da data do contrato.
+
+    O índice troca na entrega: INCC (ou o que estiver cadastrado) enquanto a
+    obra corre, IGP-M/IPCA no período de repasse. É como o contrato costuma
+    ser escrito, e é o que a planilha ignorava por completo.
+    """
+    fator, saida = 1.0, {}
+    for m in meses:
+        antes = (mes_chaves is None) or (m <= mes_chaves)
+        codigo = p.indice_ate_chaves if antes else p.indice_apos_chaves
+        fator *= 1 + p.variacao_do_mes(codigo, m)
+        saida[m] = fator
+    return saida
+
+
 # ==========================================================================
 # 3. FLUXO DE CAIXA MENSAL   (aba Viabilidades Mensais_Cenarios)
 # ==========================================================================
@@ -440,6 +462,18 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
         for m in meses:
             receita[m] += l.valores[m]
 
+    # ---------- CORREÇÃO MONETÁRIA ----------
+    # Fica em linha própria em vez de inflar "venda de imóveis": assim dá para
+    # ver quanto do caixa vem de preço e quanto vem de índice, e o resultado
+    # continua comparável com a viabilidade nominal.
+    if p.corrige_carteira:
+        fatores = fatores_correcao(p, meses, mes_chaves)
+        correcao = {m: receita[m] * (fatores[m] - 1) for m in meses}
+        L.append(LinhaFluxo("CORRECAO", "(+) Correção monetária da carteira",
+                            "RECEITA", correcao))
+        for m in meses:
+            receita[m] += correcao[m]
+
     # ---------- DEDUÇÕES (defasadas 1 mês: incidem sobre a receita do mês anterior) ----
     def defasada(base: dict[date, float], taxa: float, sinal=-1) -> dict[date, float]:
         v = dict(zero)
@@ -468,6 +502,13 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
         if m in obra_mes:
             obra_mes[m] += -abs(obra.custo_raso) * pc
     L.append(LinhaFluxo("OBRA", "(-) Obra — custo raso", "GASTO", obra_mes))
+
+    # o outro lado do índice: o INCC que reajusta a parcela reajusta a obra
+    if p.corrige_carteira and p.corrigir_custo_obra:
+        f_obra = fatores_correcao(p, meses, None)   # obra sempre pelo índice de obra
+        L.append(LinhaFluxo("CORRECAO_OBRA", "(-) Correção monetária da obra",
+                            "GASTO",
+                            {m: obra_mes[m] * (f_obra[m] - 1) for m in meses}))
     L.append(LinhaFluxo("TX_OBRA", "(-) Taxa de administração da obra", "GASTO",
                         defasada(obra_mes, p.taxa_adm_obra, sinal=+1)))
     L.append(LinhaFluxo("TX_CART", "(-) Taxa de administração de carteira", "GASTO",

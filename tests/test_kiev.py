@@ -286,3 +286,83 @@ def test_comissao_realizada_respeita_a_data_de_corte(s, emp):
                   for l in visao_viabilidade(s, emp, ate=dt.date(2026, 8, 31))}
     assert ate_julho["(-) Comissão s/ vendas"] == pytest.approx(-1_560_432.50, abs=REAL)
     assert ate_agosto["(-) Comissão s/ vendas"] == pytest.approx(-1_607_622.98, abs=REAL)
+
+
+# ---------------------------------------------------------------- correção
+def _com_correcao(s, cenario_id, projetado_aa=0.065, obra=True):
+    q(s, """UPDATE cenario SET indice_ate_chaves = 'INCC-DI',
+                               indice_apos_chaves = 'IGP-M' WHERE id = :c""", c=cenario_id)
+    for chave, valor in [("indice_projetado_aa", projetado_aa),
+                         ("corrigir_custo_obra", 1.0 if obra else 0.0)]:
+        q(s, """INSERT INTO premissa (cenario_id, chave, valor, unidade, origem)
+                VALUES (:c, :k, :v, 'percentual', 'teste')
+                ON CONFLICT (cenario_id, chave) DO UPDATE SET valor = EXCLUDED.valor""",
+          c=cenario_id, k=chave, v=valor)
+    s.commit()
+    return calcular(carregar_entradas(s, cenario_id))
+
+
+def _sem_correcao(s, cenario_id):
+    q(s, """UPDATE cenario SET indice_ate_chaves = NULL,
+                               indice_apos_chaves = NULL WHERE id = :c""", c=cenario_id)
+    q(s, """DELETE FROM premissa WHERE cenario_id = :c
+             AND chave IN ('indice_projetado_aa', 'corrigir_custo_obra')""", c=cenario_id)
+    s.commit()
+
+
+def test_sem_indice_o_resultado_e_o_nominal_da_planilha(s, cenario_realista):
+    """A correção é opcional: desligada, o sistema projeta em valores nominais."""
+    _sem_correcao(s, cenario_realista)
+    _, fluxo, _ = calcular(carregar_entradas(s, cenario_realista))
+    assert all(l.codigo != "CORRECAO" for l in fluxo.linhas)
+
+
+def test_serie_historica_do_incc_tem_precedencia(s, cenario_realista):
+    """
+    Onde há INCC publicado, é ele que vale; a taxa projetada só preenche os
+    meses futuros. Jul/2026 saiu 0,61% — não 6,5% a.a. dividido por 12.
+    """
+    from app.repositorio import carregar_entradas as ce
+    _com_correcao(s, cenario_realista)
+    p = ce(s, cenario_realista).premissas
+    assert p.variacao_do_mes("INCC-DI", dt.date(2026, 7, 31)) == pytest.approx(0.0061)
+    assert p.variacao_do_mes("INCC-DI", dt.date(2029, 5, 31)) == pytest.approx(
+        p.indice_projetado_mensal)
+    _sem_correcao(s, cenario_realista)
+
+
+def test_correcao_entra_em_linha_propria(s, cenario_realista):
+    """
+    A correção não infla "venda de imóveis": fica em linha separada, para dar
+    para ver quanto do caixa vem de preço e quanto vem de índice.
+    """
+    _, fluxo, _ = _com_correcao(s, cenario_realista)
+    correcao = sum(fluxo.linha("CORRECAO").valores.values())
+    assert correcao > 0
+    assert sum(fluxo.linha("ESTOQUE").valores.values()) > 0, "a base não pode sumir"
+    _sem_correcao(s, cenario_realista)
+
+
+def test_indice_corrige_os_dois_lados(s, cenario_realista):
+    """
+    Corrigir só a carteira inventa lucro: o INCC que reajusta a parcela do
+    cliente é o mesmo que encarece o concreto. Com os dois lados ligados, a
+    obra também tem sua linha de correção, negativa.
+    """
+    _, fluxo, _ = _com_correcao(s, cenario_realista, obra=True)
+    assert sum(fluxo.linha("CORRECAO_OBRA").valores.values()) < 0
+    _sem_correcao(s, cenario_realista)
+
+
+def test_projecao_nominal_subestima_a_exposicao(s, cenario_realista):
+    """
+    O achado que justifica a funcionalidade: com INCC nos dois lados a
+    exposição de caixa PIORA, porque o custo infla durante a obra e a
+    correção da carteira só entra depois, diluída em 60 parcelas e nas
+    chaves. Projetar em valores nominais subestima a necessidade de aporte.
+    """
+    _sem_correcao(s, cenario_realista)
+    _, _, nominal = calcular(carregar_entradas(s, cenario_realista))
+    _, _, corrigido = _com_correcao(s, cenario_realista, obra=True)
+    assert corrigido.exposicao_maxima < nominal.exposicao_maxima
+    _sem_correcao(s, cenario_realista)

@@ -238,6 +238,18 @@ class Premissas:
     financiamento_prazo_amort: int = 6       # VM E199
     financiamento_gatilho_obra: float = 0.20 # VM: libera quando evolução ≥ 20%
 
+    # --- correção monetária da carteira ---
+    # A planilha projeta em valores nominais. Aqui a correção é opcional e
+    # explícita: enquanto os índices forem None, o resultado é idêntico ao dela.
+    indice_ate_chaves: Optional[str] = None    # 'INCC-DI' durante a obra
+    indice_apos_chaves: Optional[str] = None   # 'IGP-M' ou 'IPCA' no repasse
+    indice_projetado_aa: float = 0.0           # taxa usada nos meses sem série
+    serie_indice: dict = field(default_factory=dict)  # {código: {mês: variação}}
+    # Corrigir só a carteira e deixar a obra em moeda de hoje inventa lucro:
+    # o INCC que reajusta a parcela do cliente é o mesmo que encarece o
+    # concreto. Ligado por padrão sempre que houver índice até as chaves.
+    corrigir_custo_obra: bool = True
+
     # --- indicadores ---
     tma_anual: float = 0.18                  # L60
 
@@ -253,3 +265,23 @@ class Premissas:
     @property
     def juros_mensal(self) -> float:
         return (1 + self.financiamento_juros_aa) ** (1 / 12) - 1
+
+    @property
+    def indice_projetado_mensal(self) -> float:
+        return (1 + self.indice_projetado_aa) ** (1 / 12) - 1
+
+    def variacao_do_mes(self, codigo: Optional[str], mes: date) -> float:
+        """
+        Série histórica quando existe; taxa projetada quando não existe.
+        Sem índice configurado, zero — que é a projeção nominal da planilha.
+        """
+        if not codigo:
+            return 0.0
+        historico = self.serie_indice.get(codigo, {})
+        if mes in historico:
+            return float(historico[mes])
+        return self.indice_projetado_mensal
+
+    @property
+    def corrige_carteira(self) -> bool:
+        return bool(self.indice_ate_chaves or self.indice_apos_chaves)

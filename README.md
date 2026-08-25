@@ -48,11 +48,12 @@ workspace `pauloluz.engenharia@gmail.com`.
 > troque para `basic_256mb` (US$ 6/mês) no dashboard do banco — se expirar, os
 > dados são apagados.
 
-1. Crie o repositório no GitHub e dê push (o `git init` e o primeiro commit já
-   estão feitos aqui dentro):
+1. Crie o repositório **na conta `pauloluzengenharia-png`** — é a que o Render
+   já enxerga, pelo LM Platinum. Em github.com/new: nome `viabilidade-incorporacao`,
+   privado, sem README. Depois, aqui dentro:
 
    ```bash
-   git remote add origin git@github.com:SEU-USUARIO/viabilidade.git
+   git remote add origin https://github.com/pauloluzengenharia-png/viabilidade-incorporacao.git
    git push -u origin main
    ```
 
@@ -150,11 +151,51 @@ Uma diferença é só de arredondamento e não vale correção: a planilha calcu
 "outras despesas administrativas" com `1,5001661%` — dígito espúrio de uma divisão
 feita uma vez. O sistema usa 1,5% redondo, e o lucro fica R$ 173 acima.
 
+## Correção monetária da carteira
+
+A planilha projeta tudo em valores nominais: uma parcela de 2031 entra no fluxo
+com o poder de compra de hoje, apesar de os contratos terem indexador no Sienge.
+Aqui a correção existe, é premissa do cenário e vem **desligada por padrão** —
+com ela desligada o sistema reproduz a planilha, que é o que os testes conferem.
+
+Para ligar, o cenário recebe dois índices e uma taxa projetada:
+
+| premissa | o que é |
+|---|---|
+| `cenario.indice_ate_chaves` | índice das parcelas durante a obra — tipicamente `INCC-DI` |
+| `cenario.indice_apos_chaves` | índice do período de repasse — `IGP-M` ou `IPCA` |
+| `premissa.indice_projetado_aa` | taxa anual usada nos meses que ainda não têm série publicada |
+| `premissa.corrigir_custo_obra` | 1 (padrão) corrige também o desembolso da obra |
+
+A série histórica tem precedência sobre a taxa projetada: onde a FGV já publicou,
+é o número dela que vale. O INCC-DI de 2026 (jan a jul) já vem carregado na
+migration 008 — jul/2026 fechou em 0,61% no mês e **6,4594% em 12 meses**, que é
+de onde sai a sugestão de 6,5% a.a. para a projeção.
+
+Duas decisões de modelagem que valem explicar:
+
+**A correção fica em linha própria**, `(+) Correção monetária da carteira`, em vez
+de inflar "venda de imóveis". Assim dá para ver quanto do caixa vem de preço e
+quanto vem de índice, e o DRE continua comparável com a viabilidade nominal.
+
+**O índice corrige os dois lados.** Corrigir só a parcela do cliente e deixar a
+obra em moeda de hoje inventa lucro — o INCC que reajusta a parcela é o mesmo que
+encarece o concreto. Por isso `corrigir_custo_obra` vem ligado.
+
+E o resultado disso, na Kiev, é o argumento a favor da funcionalidade:
+
+| | exposição máxima de caixa |
+|---|---|
+| projeção nominal (como a planilha) | −R$ 60,2 M |
+| com INCC nos dois lados | **−R$ 65,6 M** |
+
+A projeção nominal **subestima a necessidade de aporte em R$ 5,4 M**. O custo
+infla durante a obra, cedo; a correção da carteira só entra depois, diluída em 60
+parcelas e nas chaves. Quem dimensiona o aporte pelo número nominal se planeja
+para menos do que vai precisar.
+
 ## O que ainda não existe
 
-- **Correção monetária das parcelas.** A planilha projeta em valores nominais
-  apesar de os contratos terem indexador no Sienge. Se for corrigir, é um campo
-  em `parcela_receber` e uma série de índice mensal.
 - **Autenticação.** O sistema está aberto — antes de expor com dados reais,
   colocar um login na frente.
 - **Financiamento à produção.** O motor tem o bloco (`_linhas_financiamento`,
