@@ -18,7 +18,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from .db import q
-from .pdp import PDP, MarcoPDP, PDPIndisponivel
+from .pdp import PDP, MarcoPDP, PDPIndisponivel, _critico, _data
 
 
 # =====================================================================
@@ -102,6 +102,94 @@ def sincronizar(s: Session, emp_id: int, autor: str) -> dict:
                 f"setor nenhum — confira a classificação deles no PDP.")
     _registrar(s, emp_id, autor, True, n, d, msg)
     return {"ok": True, "mensagem": msg, "marcos": n, "dependencias": d}
+
+
+# =====================================================================
+# a entrada por arquivo
+# =====================================================================
+class ArquivoInvalido(ValueError):
+    """O arquivo não tem a cara de um cronograma exportado do PDP."""
+
+
+def ler_arquivo(conteudo: bytes) -> list[MarcoPDP]:
+    """
+    Lê o cronograma exportado do PDP em JSON.
+
+    O formato é o que a própria tela do PDP entrega, com um campo a mais: a
+    área de cada marco, que o JSON do Gantt não traz e que é justamente o que
+    liga o marco ao setor de custo.
+
+        {"marcos": [{"id": "3272", "nome": "Matrículas Retificadas",
+                     "area": "6", "processo": "Regularização",
+                     "fase": "Projeto e Legalização",
+                     "inicio": "03/06/2027", "fim": "02/09/2027",
+                     "duracao": 66, "progresso": 0, "critico": false,
+                     "predecessores": [["3221", "TI", 0]]}]}
+
+    Erro de formato para a leitura. Um cronograma pela metade viraria uma curva
+    de caixa errada sem ninguém perceber — é o mesmo cuidado da leitura direta.
+    """
+    import json
+    try:
+        dados = json.loads(conteudo.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as e:
+        raise ArquivoInvalido(f"o arquivo não é um JSON legível: {e}") from None
+
+    marcos_brutos = dados.get("marcos") if isinstance(dados, dict) else dados
+    if not isinstance(marcos_brutos, list) or not marcos_brutos:
+        raise ArquivoInvalido(
+            "não achei a lista de marcos no arquivo. Esperava um objeto com a "
+            "chave 'marcos', ou uma lista direto.")
+
+    marcos = []
+    for i, m in enumerate(marcos_brutos, start=1):
+        pid = str(m.get("id") or m.get("pdp_id") or "").lstrip("#").strip()
+        nome = (m.get("nome") or m.get("text") or "").strip()
+        if not pid or not nome:
+            raise ArquivoInvalido(
+                f"o marco na posição {i} está sem id ou sem nome. Nenhum marco "
+                f"foi gravado — corrija o arquivo e importe de novo.")
+        preds = []
+        for pr in (m.get("predecessores") or []):
+            if isinstance(pr, (list, tuple)) and pr:
+                preds.append((str(pr[0]).lstrip("#"),
+                              (pr[1] if len(pr) > 1 else "TI") or "TI",
+                              int(pr[2]) if len(pr) > 2 and pr[2] else 0))
+        marcos.append(MarcoPDP(
+            pdp_id=pid, nome=nome,
+            inicio=_data(m.get("inicio") or m.get("start_date")),
+            fim=_data(m.get("fim") or m.get("end_date")),
+            duracao=m.get("duracao") or m.get("real_duration") or m.get("duration"),
+            progresso=int(m.get("progresso") or m.get("progress_percent") or 0),
+            critico=bool(m.get("critico")) if isinstance(m.get("critico"), bool)
+                    else _critico(m.get("critico")),
+            area_codigo=str(m["area"]).strip() if m.get("area") not in (None, "") else None,
+            processo=(m.get("processo") or None),
+            fase=(m.get("fase") or None),
+            predecessores=preds))
+    return marcos
+
+
+def importar(s: Session, emp_id: int, conteudo: bytes, autor: str) -> dict:
+    """Mesma gravação da sincronização direta; só muda de onde vêm os marcos."""
+    try:
+        marcos = ler_arquivo(conteudo)
+        n, d = gravar_marcos(s, emp_id, marcos)
+    except ArquivoInvalido as e:
+        _registrar(s, emp_id, autor, False, 0, 0, str(e))
+        return {"ok": False, "mensagem": str(e)}
+    except Exception as e:                                    # noqa: BLE001
+        msg = f"a importação falhou: {e}"
+        _registrar(s, emp_id, autor, False, 0, 0, msg)
+        return {"ok": False, "mensagem": msg}
+
+    sem_area = sum(1 for m in marcos if not m.area_codigo)
+    msg = f"{n} marcos e {d} ligações, importados de arquivo."
+    if sem_area:
+        msg += (f" {sem_area} marco(s) vieram sem área e não entram em setor "
+                f"nenhum.")
+    _registrar(s, emp_id, autor, True, n, d, msg)
+    return {"ok": True, "mensagem": msg}
 
 
 def _registrar(s: Session, emp_id: int, autor: str, ok: bool,

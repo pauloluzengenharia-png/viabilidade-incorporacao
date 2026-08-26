@@ -23,6 +23,14 @@
   {% endif %}
 </div>
 
+<form method="post" class="importar"
+      action="/empreendimento/{{ emp.id }}/dados/cronograma/importar"
+      enctype="multipart/form-data">
+  <label class="campo"><span class="rot">Ou importe o cronograma exportado do PDP</span>
+    <input type="file" name="arquivo" accept=".json,application/json" required></label>
+  <button type="submit">Importar arquivo</button>
+</form>
+
 {% if not configurado %}
 <div class="aviso"><span><b>A leitura do PDP não está configurada.</b>
   O sistema precisa de um usuário do PDP para ler o cronograma. Crie um usuário
@@ -36,6 +44,15 @@
   {{ ultima.mensagem }}</span></div>
 {% elif ultima and ultima.ok %}
 <div class="aviso calmo"><span>{{ ultima.mensagem }}</span></div>
+{% endif %}
+
+{% if ultima and not ultima.ok and 'Cloudflare' in (ultima.mensagem or '') %}
+<div class="aviso"><span><b>O PDP não aceita leitura de servidor.</b>
+  Ele está atrás de um desafio de bot do Cloudflare, que responde antes do
+  login — nenhuma credencial passa por ali, e contornar esse desafio não é
+  caminho. Duas saídas: pedir a quem administra o PDP que libere o IP deste
+  serviço na regra de WAF (ou publique uma API), e, enquanto isso, importar o
+  cronograma por arquivo aqui em cima.</span></div>
 {% endif %}
 
 {% if not areas %}
@@ -134,6 +151,11 @@
   .cp{font-size:.62rem; letter-spacing:.09em; border:1px solid var(--realizado);
     color:var(--realizado); border-radius:3px; padding:0 .25rem; margin-left:.4rem;
     vertical-align:1px}
+  .importar{display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;
+    margin:0 0 1.6rem; padding:1rem 1.2rem; background:var(--cartao);
+    border:1px solid var(--fio); border-radius:10px}
+  .importar .campo{margin:0}
+  .importar input[type=file]{font-size:.85rem}
   .vazio{background:var(--cartao); border:1px solid var(--fio); border-radius:12px;
     padding:2rem; text-align:center}
   .vazio .sub{max-width:56ch; margin:.6rem auto 0}

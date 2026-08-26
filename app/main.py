@@ -336,6 +336,17 @@ def sincronizar_cronograma(emp_id: int, s: Session = Depends(sessao),
                             status_code=303)
 
 
+@app.post("/empreendimento/{emp_id}/dados/cronograma/importar")
+async def importar_cronograma(emp_id: int, arquivo: UploadFile = File(...),
+                              s: Session = Depends(sessao),
+                              autor: str = Depends(usuario_atual)):
+    """O caminho que funciona quando o PDP não aceita acesso de servidor."""
+    cronograma.importar(s, emp_id, await arquivo.read(), autor)
+    s.commit()
+    return RedirectResponse(f"/empreendimento/{emp_id}/dados/cronograma",
+                            status_code=303)
+
+
 # ------------------------------------------------------ setores de custo
 @app.get("/empreendimento/{emp_id}/dados/custos", response_class=HTMLResponse)
 def tela_custos(emp_id: int, request: Request, cenario: Optional[int] = None,

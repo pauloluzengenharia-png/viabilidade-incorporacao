@@ -166,3 +166,32 @@ def test_projeto_vazio_e_erro_e_nao_silencio(cliente):
     c.entrar()
     with pytest.raises(PDPIndisponivel, match="marco nenhum"):
         c.marcos(26)
+
+
+# =====================================================================
+# a entrada por arquivo
+# =====================================================================
+def test_arquivo_vira_marcos():
+    from app.cronograma import ler_arquivo
+    bruto = ('{"marcos":[{"id":"#3272","nome":"Matrículas Retificadas",'
+             '"area":"6","processo":"Regularização","fase":"Projeto e Legalização",'
+             '"inicio":"03/06/2027","fim":"02/09/2027","duracao":66,'
+             '"progresso":0,"critico":false,'
+             '"predecessores":[["3221","TI",0],["#3253","TI",5]]}]}')
+    m = ler_arquivo(bruto.encode("utf-8"))[0]
+    assert m.pdp_id == "3272" and m.area_codigo == "6"
+    assert m.fim == dt.date(2027, 9, 2) and m.duracao == 66
+    assert m.predecessores == [("3221", "TI", 0), ("3253", "TI", 5)]
+
+
+@pytest.mark.parametrize("bruto,erro", [
+    (b"nao sou json", "não é um JSON legível"),
+    (b'{"outra_coisa": 1}', "lista de marcos"),
+    (b'{"marcos": []}', "lista de marcos"),
+    (b'{"marcos": [{"nome": "sem id"}]}', "sem id ou sem nome"),
+])
+def test_arquivo_torto_para_tudo(bruto, erro):
+    """Meio cronograma é pior que nenhum: vira curva de caixa errada calada."""
+    from app.cronograma import ArquivoInvalido, ler_arquivo
+    with pytest.raises(ArquivoInvalido, match=erro):
+        ler_arquivo(bruto)

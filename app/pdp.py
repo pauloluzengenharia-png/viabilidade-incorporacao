@@ -38,6 +38,17 @@ class PDPIndisponivel(RuntimeError):
     """O PDP não respondeu, recusou a credencial ou mudou de formato."""
 
 
+class PDPProtegido(PDPIndisponivel):
+    """
+    O PDP está atrás de um desafio de bot e não aceita acesso servidor a servidor.
+
+    Não há o que consertar deste lado: o Cloudflare do PDP responde 403 antes do
+    login, para qualquer credencial. Quem resolve é quem administra o PDP —
+    liberando o IP do serviço na regra de WAF, ou publicando uma API de verdade.
+    Enquanto isso, o cronograma entra por arquivo.
+    """
+
+
 @dataclass
 class MarcoPDP:
     pdp_id: str
@@ -63,6 +74,29 @@ def _data(txt) -> Optional[date]:
         except ValueError:
             continue
     return None
+
+
+def _conferir_desafio(r) -> None:
+    """
+    Distingue "credencial errada" de "nem chegou no PDP".
+
+    O Cloudflare marca a resposta com `cf-mitigated: challenge` quando decide
+    que o cliente não é um navegador. Sem esta checagem, o erro que aparece na
+    tela é "respondeu 403" e a pessoa vai passar a tarde conferindo a senha.
+    """
+    if r.status_code != 403:
+        return
+    marcas = {k.lower(): (v or "").lower() for k, v in r.headers.items()}
+    desafio = ("challenge" in marcas.get("cf-mitigated", "")
+               or "cloudflare" in marcas.get("server", "")
+               or "cf-ray" in marcas)
+    if desafio:
+        raise PDPProtegido(
+            "o PDP está atrás de um desafio de bot do Cloudflare e recusa "
+            "acesso de servidor antes mesmo do login — nenhuma senha passa por "
+            "aí. Quem administra o PDP precisa liberar o IP deste serviço na "
+            "regra de WAF, ou disponibilizar uma API. Enquanto isso, use a "
+            "importação por arquivo.")
 
 
 def _critico(v) -> bool:
@@ -117,6 +151,8 @@ class PDP:
         except requests.RequestException as e:
             raise PDPIndisponivel(f"não consegui falar com o PDP: {e}") from e
 
+        _conferir_desafio(r)
+
         # o PDP responde 200 tanto para entrada aceita quanto recusada; o que
         # separa os dois é continuar na tela de login
         if 'name="password"' in r.text and "/dashboard" not in r.url:
@@ -130,6 +166,7 @@ class PDP:
         r = self.sessao.get(f"{self.url}/dashboard", timeout=TIMEOUT, params={
             "action": "simulation", "project_id": project_id,
             "critical_path_filter": "false", "ordenation": "end_date", "order": "asc"})
+        _conferir_desafio(r)
         if r.status_code != 200:
             raise PDPIndisponivel(f"a tela de simulação respondeu {r.status_code}")
         return r.text
