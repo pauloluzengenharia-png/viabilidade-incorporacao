@@ -32,6 +32,8 @@ from .seguranca import (COOKIE, DURACAO, conferir_senha, credenciais_configurada
                         criar_sessao, exigir_login, usuario_atual)
 from .seguranca import registrar as registrar_seguranca
 from .servico import calcular, rodar_e_persistir, visao_viabilidade
+from . import cronograma
+from .pdp import PDP
 
 AQUI = pathlib.Path(__file__).resolve().parent
 # a dependência vale para TODAS as rotas; `exigir_login` libera só o health check
@@ -257,6 +259,7 @@ MENU_DADOS = [
     {"slug": "obra",      "titulo": "Obra"},
     {"slug": "terreno",   "titulo": "Terreno"},
     {"slug": "unidades",  "titulo": "Unidades"},
+    {"slug": "cronograma", "titulo": "Cronograma"},
 ]
 
 
@@ -298,6 +301,9 @@ def tela_dados(emp_id: int, request: Request, s: Session = Depends(sessao)):
         "terreno": f"{n('SELECT count(*) AS n FROM premissa_terreno WHERE cenario_id = :c', c=cen['id'])} parcela(s)",
         "unidades": f"{n('SELECT count(*) AS n FROM unidade WHERE empreendimento_id = :e', e=emp_id)} unidades",
     }
+    nm = n('SELECT count(*) AS n FROM marco WHERE empreendimento_id = :e', e=emp_id)
+    ctx["resumo"]["cronograma"] = (f"{nm} marcos do PDP" if nm
+                                   else "sem cronograma sincronizado")
     ctx["alteracoes"] = edicao.historico(s, emp_id, limite=6)
     return templates.TemplateResponse(request, "dados.html", ctx)
 
@@ -307,6 +313,27 @@ def tela_historico(emp_id: int, request: Request, s: Session = Depends(sessao)):
     ctx = _contexto_dados(s, emp_id, "historico")
     ctx["eventos"] = edicao.historico(s, emp_id, limite=300)
     return templates.TemplateResponse(request, "historico.html", ctx)
+
+
+# ---------------------------------------------------------- cronograma
+@app.get("/empreendimento/{emp_id}/dados/cronograma", response_class=HTMLResponse)
+def tela_cronograma(emp_id: int, request: Request, s: Session = Depends(sessao)):
+    """O cronograma do PDP visto pelo estudo: cada área e o setor que ela paga."""
+    ctx = _contexto_dados(s, emp_id, "cronograma")
+    ctx.update(areas=cronograma.por_area(s, emp_id),
+               ultima=cronograma.ultima_sincronizacao(s, emp_id),
+               configurado=PDP.configurado())
+    return templates.TemplateResponse(request, "cronograma.html", ctx)
+
+
+@app.post("/empreendimento/{emp_id}/dados/cronograma/sincronizar")
+def sincronizar_cronograma(emp_id: int, s: Session = Depends(sessao),
+                           autor: str = Depends(usuario_atual)):
+    """Lê o PDP e substitui o cronograma. Nunca estoura: a tela conta o que houve."""
+    cronograma.sincronizar(s, emp_id, autor)
+    s.commit()
+    return RedirectResponse(f"/empreendimento/{emp_id}/dados/cronograma",
+                            status_code=303)
 
 
 # ------------------------------------------------------ setores de custo
@@ -336,6 +363,8 @@ def tela_setor(emp_id: int, codigo: str, request: Request,
                congelado=bool(cen["tipo"] == "orcado"),
                salvo=salvo.split("|") if salvo else None, erros=[],
                setor=st, itens=itens,
+               marcos=cronograma.marcos_para_escolha(s, emp_id, codigo),
+               janela=cronograma.resumo_do_setor(s, emp_id, cen["id"], codigo),
                total=sum(float(i["valor"]) for i in itens))
     return templates.TemplateResponse(request, "custo_setor.html", ctx)
 
@@ -354,9 +383,11 @@ async def salvar_setor(emp_id: int, codigo: str, request: Request,
 
     f = await request.form()
     itens = []
-    for descricao, qtd, unidade, unitario, valor, obs in zip(
+    marcos_enviados = f.getlist("marco_id") or [""] * len(f.getlist("descricao"))
+    for descricao, qtd, unidade, unitario, valor, obs, marco in zip(
             f.getlist("descricao"), f.getlist("quantidade"), f.getlist("unidade"),
-            f.getlist("valor_unitario"), f.getlist("valor"), f.getlist("observacao")):
+            f.getlist("valor_unitario"), f.getlist("valor"), f.getlist("observacao"),
+            marcos_enviados):
         quantidade = edicao.num(qtd)
         unit = edicao.num(unitario)
         # quantidade × unitário manda quando os dois existem; o total digitado
@@ -364,7 +395,8 @@ async def salvar_setor(emp_id: int, codigo: str, request: Request,
         total = quantidade * unit if quantidade and unit else edicao.num(valor)
         itens.append({"descricao": descricao, "quantidade": quantidade or None,
                       "unidade": unidade, "valor_unitario": unit or None,
-                      "valor": total, "observacao": obs})
+                      "valor": total, "observacao": obs,
+                      "marco_id": int(marco) if marco else None})
 
     try:
         mudou = edicao.gravar_composicao(s, emp_id=emp_id, cenario_id=cen["id"],

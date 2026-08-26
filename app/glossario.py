@@ -389,10 +389,62 @@ orçar.""", [
         de_onde="Orçamento de marketing.",
         como="Composição no módulo **Dados › Custos › Marketing — propaganda**: fee de agência, produção, mídia paga, brindes e eventos.",
         exemplo="1.545.045,14"),
+    Verbete("pdp_project_id", "Código do projeto no PDP", "número",
+        o_que="O identificador deste empreendimento no PDP. É o que liga o estudo ao cronograma: sem ele não há sincronização de marcos.",
+        de_onde="A URL do PDP quando o projeto está aberto — o número em `project_id=26`.",
+        como="Só o número. Deixe vazio enquanto o empreendimento não tiver cronograma no PDP; o estudo funciona sem, cada setor desembolsando pela regra fixa.",
+        exemplo="26"),
+
+    Verbete("pos_entrega", "Pós-entrega e relacionamento", "R$",
+        o_que="O que se gasta depois que a chave sai: vistorias e revistorias das unidades, brindes e evento de entrega, assembleia de instalação do condomínio, acompanhamento do síndico, pesquisa de satisfação e o apoio ao repasse bancário dos clientes.",
+        de_onde="O cronograma do PDP lista dez marcos de CX e Relacionamento que ninguém orçava. Some as propostas e verbas de cada um deles.",
+        como="Composição no módulo **Dados › Custos › Pós-entrega e relacionamento**. Este setor desembolsa *depois* da obra — se o cronograma estiver sincronizado, cai nos meses dos marcos; se não estiver, o motor o concentra no fim do horizonte.",
+        cuidado="É o custo mais fácil de esquecer, porque acontece quando a obra já acabou e o estudo parece encerrado. Zero aqui significa assumir que entregar não custa nada.",
+        exemplo="Brindes 60.000,00 + evento de entrega 90.000,00 + equipe de vistoria 120.000,00"),
+
     Verbete("outras_entradas", "Outras receitas administrativas", "R$",
         o_que="Entradas que não vêm de venda de unidade: rendimento de aplicação, recuperação de despesa.",
         de_onde="Contabilidade.", como="Valor total positivo.",
         exemplo="117,95"),
+])
+
+
+# =====================================================================
+# 7b. Cronograma e desembolso
+# =====================================================================
+CRONOGRAMA = Secao("cronograma", "Cronograma e desembolso", """
+O estudo sempre soube **quanto** cada setor custa. Quando é que esse dinheiro
+sai, ele chutava: regularização fundiária diluída na curva da obra, decoração
+nos seis últimos meses, marketing ao longo do canteiro. São regras razoáveis e
+nenhuma delas é verdade — o cronograma do PDP mostra que a regularização
+fundiária ocupa cinco anos de calendário e que o comercial se resolve em onze
+meses.
+
+Diluir custo pela obra adianta desembolso que acontece lá na frente, e a
+exposição máxima de caixa — o número que decide o aporte — sai errada nas duas
+pontas. Com o cronograma sincronizado, cada setor passa a desembolsar nos meses
+em que a sua área tem marco terminando.
+
+Nada disso muda o resultado. **Quando o dinheiro sai é caixa; quanto custa é
+resultado.** Sincronizar o cronograma não move o lucro em um centavo — move a
+curva, a exposição e o aporte.""", [
+    Verbete("marco", "Marco", "data",
+        o_que="Uma entrega datada do cronograma do PDP: um alvará emitido, um registro feito, um evento realizado. Cada marco tem área responsável, início, fim e os marcos que precisam acontecer antes dele.",
+        de_onde="O PDP. O estudo apenas lê — sincronizar substitui o cronograma inteiro do empreendimento.",
+        como="Não se digita aqui. Preencha o *código do projeto no PDP* no cadastro e use **Dados › Cronograma › Sincronizar**.",
+        cuidado="Marco sem área não entra em setor nenhum e some da distribuição. A tela de cronograma avisa quantos vieram assim."),
+
+    Verbete("janela_do_setor", "Janela do setor", "meses",
+        o_que="O período entre o primeiro início e o último fim dos marcos das áreas que alimentam um setor de custo. É o intervalo em que aquele dinheiro sai.",
+        de_onde="Calculada a partir dos marcos sincronizados e do de-para entre área do PDP e setor de custo.",
+        como="Não se preenche: aparece na tela do setor assim que há cronograma. Sem marco, o setor mantém a regra fixa do cadastro — diluído na obra, no lançamento, à vista ou na entrega.",
+        exemplo="Regularização fundiária: 01/2026 → 01/2031, 15 marcos"),
+
+    Verbete("item_no_marco", "Item amarrado a um marco", "escolha",
+        o_que="A opção, em cada linha da composição, de dizer que aquele gasto sai no mês de um marco específico em vez de entrar na média do setor.",
+        de_onde="Você. É para o gasto que tem data conhecida: a taxa que se paga no protocolo, o evento que acontece num dia, a parcela presa a um alvará.",
+        como="No módulo do setor, escolha o marco na coluna *Marco do cronograma*. Deixe em “pela janela do setor” quando o gasto não tem data própria.",
+        cuidado="Amarrar tudo não deixa o estudo mais preciso, deixa mais frágil: cada reprogramação passa a mexer em todas as linhas. Amarre o que tem data de verdade."),
 ])
 
 
@@ -522,7 +574,7 @@ soubesse onde ficava a fronteira. Aqui a fronteira é o mês de corte.""", [
 
 
 SECOES = [CADASTRO, TABELA, PLANO, OBRA, TERRENO, DEDUCOES, INCORPORACAO,
-          CORRECAO, INDICADORES, COLUNAS]
+          CRONOGRAMA, CORRECAO, INDICADORES, COLUNAS]
 
 # índice plano, para o "?" ao lado de um campo achar seu verbete pela chave
 POR_CHAVE = {v.chave: v for s in SECOES for v in s.verbetes}
@@ -556,6 +608,7 @@ LINHA_AJUDA = {
     "(-) Incorporação - Outros": "projetos_e_outros",
     "(-) Marketing - Stand": "marketing_stand",
     "(-) Marketing - Propaganda": "marketing_propaganda",
+    "(-) Pós-entrega e relacionamento": "pos_entrega",
     "(-) Outras despesas administrativas": "outras_desp_adm_perc",
     "(+) Outras receitas administrativas": "outras_entradas",
     "LUCRO": "lucro",

@@ -186,3 +186,118 @@ def test_nao_sobrou_premissa_escalar_de_setor(s):
                       JOIN setor_custo s ON s.codigo = p.chave
                      GROUP BY p.chave""")
     assert not sobrou, f"premissa escalar sobrevivendo: {sobrou}"
+
+
+# =====================================================================
+# o cronograma mandando no desembolso
+# =====================================================================
+@pytest.fixture
+def cronograma_de_teste(s, emp, cenario):
+    """
+    Monta um cronograma mínimo para a regularização fundiária e desmonta depois.
+
+    Dois marcos, em meses diferentes e distantes da obra: é justamente o caso em
+    que a regra antiga (diluir pela curva física) erra a data, e portanto o caso
+    que prova que agora o calendário manda.
+    """
+    import datetime as dt
+    base = q(s, "SELECT mes_base FROM cenario WHERE id = :c", c=cenario)[0]["mes_base"]
+    m1 = dt.date(base.year + 1, 3, 31)
+    m2 = dt.date(base.year + 3, 9, 30)
+    ids = []
+    for pdp_id, nome, fim in (("T001", "Matrículas retificadas", m1),
+                              ("T002", "Matrículas unificadas", m2)):
+        ids.append(q(s, """INSERT INTO marco (empreendimento_id, pdp_id, nome,
+                                area_codigo, inicio, fim, duracao, progresso, critico)
+                           VALUES (:e, :p, :n, '6', :i, :f, 30, 0, false)
+                           RETURNING id""",
+                     e=emp, p=pdp_id, n=nome, i=fim, f=fim)[0]["id"])
+    s.commit()
+    yield {"ids": ids, "meses": [m1, m2]}
+    q(s, "DELETE FROM marco WHERE empreendimento_id = :e AND pdp_id LIKE 'T00%'", e=emp)
+    s.commit()
+
+
+def _linha_do_fluxo(s, cenario_id, codigo):
+    from app.repositorio import carregar_entradas
+    _, fluxo, _ = calcular(carregar_entradas(s, cenario_id))
+    return next(l for l in fluxo.linhas if l.codigo == codigo)
+
+
+def test_o_desembolso_cai_nos_meses_dos_marcos(s, emp, cenario,
+                                               composicao_limpa, cronograma_de_teste):
+    """Sem marco, o custo seguia a curva da obra. Com marco, segue o calendário."""
+    codigo = composicao_limpa
+    edicao.gravar_composicao(
+        s, emp_id=emp, cenario_id=cenario, codigo=codigo, autor="teste",
+        itens=[{"descricao": "Verba de cartório", "quantidade": None,
+                "unidade": None, "valor_unitario": None, "valor": 200_000.0,
+                "observacao": ""}])
+    s.commit()
+
+    linha = _linha_do_fluxo(s, cenario, "REG_FUND")
+    meses_com_valor = {m for m, v in linha.valores.items() if abs(v) > 0.005}
+    assert meses_com_valor == set(cronograma_de_teste["meses"]), (
+        "o desembolso tinha de cair exatamente nos dois meses de marco")
+    for m in cronograma_de_teste["meses"]:
+        assert linha.valores[m] == pytest.approx(-100_000.0, abs=CENT)
+
+
+def test_item_amarrado_a_um_marco_sai_na_data_dele(s, emp, cenario,
+                                                   composicao_limpa, cronograma_de_teste):
+    """
+    Um item com marco não entra na média: sai inteiro no mês daquele marco.
+    O resto do setor continua repartido pelos meses da área.
+    """
+    codigo = composicao_limpa
+    primeiro, segundo = cronograma_de_teste["meses"]
+    edicao.gravar_composicao(
+        s, emp_id=emp, cenario_id=cenario, codigo=codigo, autor="teste",
+        itens=[{"descricao": "Taxa paga no protocolo", "quantidade": None,
+                "unidade": None, "valor_unitario": None, "valor": 60_000.0,
+                "observacao": "", "marco_id": cronograma_de_teste["ids"][0]},
+               {"descricao": "Verba de cartório", "quantidade": None,
+                "unidade": None, "valor_unitario": None, "valor": 40_000.0,
+                "observacao": ""}])
+    s.commit()
+
+    linha = _linha_do_fluxo(s, cenario, "REG_FUND")
+    # 60.000 no marco escolhido + metade dos 40.000 soltos
+    assert linha.valores[primeiro] == pytest.approx(-80_000.0, abs=CENT)
+    assert linha.valores[segundo] == pytest.approx(-20_000.0, abs=CENT)
+    assert sum(linha.valores.values()) == pytest.approx(-100_000.0, abs=CENT)
+
+
+def test_o_cronograma_muda_o_caixa_e_nao_o_resultado(s, emp, cenario,
+                                                     composicao_limpa, cronograma_de_teste):
+    """
+    A promessa do módulo em uma linha: quando o dinheiro sai é caixa; quanto
+    custa é resultado. Mexer no cronograma não pode mexer no lucro.
+    """
+    codigo = composicao_limpa
+    itens = [{"descricao": "Verba de cartório", "quantidade": None, "unidade": None,
+              "valor_unitario": None, "valor": 200_000.0, "observacao": ""}]
+    edicao.gravar_composicao(s, emp_id=emp, cenario_id=cenario, codigo=codigo,
+                             itens=itens, autor="teste")
+    s.commit()
+    from app.repositorio import carregar_entradas
+    com_marcos, _, _ = calcular(carregar_entradas(s, cenario))
+
+    q(s, "DELETE FROM marco WHERE empreendimento_id = :e AND pdp_id LIKE 'T00%'", e=emp)
+    s.commit()
+    sem_marcos, _, _ = calcular(carregar_entradas(s, cenario))
+
+    assert com_marcos.lucro == pytest.approx(sem_marcos.lucro, abs=CENT)
+    assert com_marcos.regularizacao_fundiaria == pytest.approx(
+        sem_marcos.regularizacao_fundiaria, abs=CENT)
+
+
+def test_area_sem_setor_nao_puxa_custo_nenhum(s):
+    """
+    Engenharia e Orçamento têm marco e não têm setor: o trabalho delas já está
+    orçado em outro lugar. Se um dia ganharem setor por engano, o custo daquele
+    setor passaria a ser distribuído pela obra inteira sem ninguém notar.
+    """
+    sem_setor = {l["nome"] for l in
+                 q(s, "SELECT nome FROM area_pdp WHERE setor IS NULL")}
+    assert {"Engenharia", "Orçamento", "Controladoria", "Novos Negócios"} <= sem_setor

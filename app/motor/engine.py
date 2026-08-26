@@ -147,6 +147,7 @@ class DRE:
     terreno_pagamento: float
     terreno_registro: float
     regularizacao_fundiaria: float
+    pos_entrega: float
     legalizacao: float
     obra_custo_raso: float
     taxa_adm_obra: float
@@ -174,6 +175,7 @@ class DRE:
     def despesas(self) -> float:
         return (self.legalizacao + self.decoracao + self.projetos_e_outros
                 + self.marketing_stand + self.marketing_propaganda
+                + self.pos_entrega
                 + self.outras_desp_adm + self.outras_entradas)
 
     @property
@@ -226,6 +228,7 @@ def calcular_dre(bloco: BlocoVGV, obra: Obra, p: Premissas) -> DRE:
         terreno_pagamento=terreno_pgto,
         terreno_registro=terreno_pgto * p.terreno_registro_perc,
         regularizacao_fundiaria=-p.regularizacao_fundiaria,
+        pos_entrega=-p.pos_entrega,
         legalizacao=-p.legalizacao,
         obra_custo_raso=custo_raso,
         taxa_adm_obra=custo_raso * p.taxa_adm_obra,
@@ -419,6 +422,28 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
     """
     meses = eixo_meses(p.mes_base, horizonte)
     zero = {m: 0.0 for m in meses}
+
+    # Quando o cronograma do PDP diz em que meses um setor acontece, ele manda.
+    # A regra fixa abaixo continua valendo para o setor que ainda não tem marco
+    # — e é isso que faz o cronograma melhorar a projeção sem ser obrigatório.
+    eixo = set(meses)
+
+    def pelo_cronograma(total: float, setor: str) -> Optional[dict]:
+        pesos = (p.pesos_setor or {}).get(setor)
+        if not pesos:
+            return None
+        # o que cai fora do horizonte projetado volta para dentro, no último mês
+        # do eixo: some-lo em silêncio esconderia gasto do estudo
+        v = dict(zero)
+        fora = 0.0
+        for mes, w in pesos.items():
+            if mes in eixo:
+                v[mes] = v.get(mes, 0.0) - total * w
+            else:
+                fora += w
+        if fora:
+            v[meses[-1]] = v.get(meses[-1], 0.0) - total * fora
+        return v
     L: list[LinhaFluxo] = []
 
     # ---------- RECEITAS ----------
@@ -491,7 +516,8 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
     L.append(LinhaFluxo("IMPOSTOS", "(-) Impostos sobre receita (RET)", "DEDUCAO",
                         defasada(receita, p.ret)))
     L.append(LinhaFluxo("DESP_COM", "(-) Despesas comerciais", "DEDUCAO",
-                        {**zero, meses[0]: -p.despesas_comerciais}))
+                        pelo_cronograma(p.despesas_comerciais, "despesas_comerciais")
+                        or {**zero, meses[0]: -p.despesas_comerciais}))
 
     # ---------- GASTOS ----------
     # obra: distribuída pela curva do cronograma
@@ -530,7 +556,11 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
                         {**zero, meses[0]: -sum(p.terreno_parcelas) * p.terreno_registro_perc}))
 
     # despesas diluídas linearmente sobre a janela em que fazem sentido
-    def diluir(total: float, inicio: int, n: int, cod: str, desc: str) -> LinhaFluxo:
+    def diluir(total: float, inicio: int, n: int, cod: str, desc: str,
+               setor: Optional[str] = None) -> LinhaFluxo:
+        pelo = pelo_cronograma(total, setor) if setor else None
+        if pelo is not None:
+            return LinhaFluxo(cod, desc, "GASTO", pelo)
         v = dict(zero)
         for k in range(n):
             if inicio + k < len(meses):
@@ -542,20 +572,31 @@ def montar_fluxo(unidades: Iterable[Unidade], obra: Obra, p: Premissas,
     # distribui o total na mesma proporção do desembolso de cada mês.
     total_obra = sum(obra_mes.values()) or 1.0
 
-    def pela_obra(total: float, cod: str, desc: str) -> LinhaFluxo:
+    def pela_obra(total: float, cod: str, desc: str, setor: str) -> LinhaFluxo:
+        pelo = pelo_cronograma(total, setor)
+        if pelo is not None:
+            return LinhaFluxo(cod, desc, "GASTO", pelo)
         return LinhaFluxo(cod, desc, "GASTO",
                           {m: -total * (obra_mes[m] / total_obra) for m in meses})
 
     L.append(pela_obra(p.regularizacao_fundiaria, "REG_FUND",
-                       "(-) Terreno — regularização fundiária"))
+                       "(-) Terreno — regularização fundiária", "regularizacao_fundiaria"))
     L.append(pela_obra(p.legalizacao, "LEGAL",
-                       "(-) Incorporação — legalização"))
+                       "(-) Incorporação — legalização", "legalizacao"))
 
     n_obra = sum(1 for m in meses if obra_mes[m])
-    L.append(diluir(p.decoracao, max(n_obra - 6, 0), 6, "DECOR", "(-) Incorporação — decoração"))
-    L.append(diluir(p.projetos_e_outros, 0, max(n_obra, 1), "PROJ", "(-) Incorporação — projetos e outros"))
-    L.append(diluir(p.marketing_stand, 0, 6, "STAND", "(-) Marketing — stand"))
-    L.append(diluir(p.marketing_propaganda, 0, max(n_obra, 1), "PROP", "(-) Marketing — propaganda"))
+    L.append(diluir(p.decoracao, max(n_obra - 6, 0), 6, "DECOR",
+                    "(-) Incorporação — decoração", "decoracao"))
+    L.append(diluir(p.projetos_e_outros, 0, max(n_obra, 1), "PROJ",
+                    "(-) Incorporação — projetos e outros", "projetos_e_outros"))
+    L.append(diluir(p.marketing_stand, 0, 6, "STAND",
+                    "(-) Marketing — stand", "marketing_stand"))
+    L.append(diluir(p.marketing_propaganda, 0, max(n_obra, 1), "PROP",
+                    "(-) Marketing — propaganda", "marketing_propaganda"))
+    # o pós-entrega quase todo cai depois da última chave: sem cronograma ele
+    # não tem onde acontecer, e o motor o concentra no fim do horizonte
+    L.append(diluir(p.pos_entrega, max(len(meses) - 6, 0), 6, "POS_ENT",
+                    "(-) Pós-entrega e relacionamento", "pos_entrega"))
     L.append(LinhaFluxo("OUTRAS_ADM", "(-) Outras despesas administrativas", "GASTO",
                         {m: obra_mes[m] * p.outras_desp_adm_perc for m in meses}))
 

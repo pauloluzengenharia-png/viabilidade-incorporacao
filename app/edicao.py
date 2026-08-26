@@ -246,6 +246,7 @@ contaminante da tela.""", grupos=[
         Campo("cnpj", "CNPJ", "texto", "opcional"),
         Campo("sienge_enterprise_id", "Código no Sienge", "inteiro", "opcional"),
         Campo("sienge_company_id", "Código da empresa no Sienge", "inteiro", "opcional"),
+        Campo("pdp_project_id", "Código do projeto no PDP", "inteiro", "opcional"),
     ]),
     Grupo("Áreas e datas", campos=[
         Campo("area_privativa", "Área privativa total", "numero", "m²"),
@@ -810,9 +811,13 @@ def setor(s: Session, codigo: str) -> Optional[dict]:
 
 
 def ler_composicao(s: Session, cenario_id: int, codigo: str) -> list[dict]:
-    return q(s, """SELECT * FROM composicao_item
-                    WHERE cenario_id = :c AND setor = :s
-                    ORDER BY ordem, id""", c=cenario_id, s=codigo)
+    """Os itens do setor, já com o marco a que cada um se amarra, quando há."""
+    return q(s, """SELECT ci.*, m.pdp_id AS marco_pdp, m.nome AS marco_nome,
+                          m.fim AS marco_fim
+                     FROM composicao_item ci
+                     LEFT JOIN marco m ON m.id = ci.marco_id
+                    WHERE ci.cenario_id = :c AND ci.setor = :s
+                    ORDER BY ci.ordem, ci.id""", c=cenario_id, s=codigo)
 
 
 def totais_por_setor(s: Session, cenario_id: int) -> dict[str, dict]:
@@ -831,9 +836,9 @@ def gravar_composicao(s: Session, *, emp_id: int, cenario_id: int, codigo: str,
     comparar pelo id faria remover a segunda linha parecer "a segunda mudou, a
     terceira mudou, a quarta sumiu". O histórico registra item a item.
     """
-    antes = [(i["descricao"], float(i["valor"])) for i in
+    antes = [(i["descricao"], float(i["valor"]), i.get("marco_id")) for i in
              ler_composicao(s, cenario_id, codigo)]
-    depois = [(i["descricao"], i["valor"]) for i in itens
+    depois = [(i["descricao"], i["valor"], i.get("marco_id")) for i in itens
               if i["descricao"].strip() and i["valor"] > 0]
 
     mudou = []
@@ -856,17 +861,19 @@ def gravar_composicao(s: Session, *, emp_id: int, cenario_id: int, codigo: str,
             [i for i in itens if i["descricao"].strip() and i["valor"] > 0], start=1):
         q(s, """INSERT INTO composicao_item
                   (cenario_id, setor, ordem, descricao, quantidade, unidade,
-                   valor_unitario, valor, observacao)
-                VALUES (:c,:s,:o,:d,:q,:u,:vu,:v,:ob)""",
+                   valor_unitario, valor, observacao, marco_id)
+                VALUES (:c,:s,:o,:d,:q,:u,:vu,:v,:ob,:mk)""",
           c=cenario_id, s=codigo, o=ordem, d=item["descricao"].strip(),
           q=item.get("quantidade") or None, u=(item.get("unidade") or "").strip() or None,
           vu=item.get("valor_unitario") or None, v=item["valor"],
-          ob=(item.get("observacao") or "").strip() or None)
+          ob=(item.get("observacao") or "").strip() or None,
+          mk=item.get("marco_id") or None)
     return mudou
 
 
 def _item_texto(item) -> Optional[str]:
     if not item:
         return None
-    descricao, valor = item
-    return f"{descricao} — R$ {moeda(valor)}"
+    descricao, valor, marco = item
+    texto = f"{descricao} — R$ {moeda(valor)}"
+    return texto + (f" (no marco {marco})" if marco else "")

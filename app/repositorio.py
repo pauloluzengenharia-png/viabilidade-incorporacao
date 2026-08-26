@@ -169,7 +169,8 @@ def carregar_tabela(s: Session, emp_id: int, nome: str) -> Optional[TabelaVenda]
 #: Os setores cujo valor é a soma da composição, e não uma premissa escalar.
 SETORES_COMPOSTOS = ("regularizacao_fundiaria", "legalizacao", "decoracao",
                      "projetos_e_outros", "marketing_stand",
-                     "marketing_propaganda", "despesas_comerciais")
+                     "marketing_propaganda", "despesas_comerciais",
+                     "pos_entrega")
 
 
 def somar_composicoes(s: Session, cenario_id: int) -> dict[str, float]:
@@ -179,7 +180,94 @@ def somar_composicoes(s: Session, cenario_id: int) -> dict[str, float]:
     return {l["setor"]: float(l["total"]) for l in linhas}
 
 
-def carregar_premissas(s: Session, cenario: dict, emp: dict) -> Premissas:
+def marcos_do_empreendimento(s: Session, emp_id: int) -> list[dict]:
+    """Os marcos sincronizados do PDP, com a área e o setor que cada um paga."""
+    return q(s, """SELECT m.*, a.nome AS area_nome, a.setor
+                     FROM marco m
+                     LEFT JOIN area_pdp a ON a.codigo = m.area_codigo
+                    WHERE m.empreendimento_id = :e
+                    ORDER BY m.fim, m.inicio, m.pdp_id""", e=emp_id)
+
+
+def janela_dos_setores(s: Session, emp_id: int) -> dict[str, dict]:
+    """
+    Quando cada setor de custo aparece no cronograma.
+
+    Devolve, por setor, o primeiro início e o último fim dos marcos das áreas
+    que alimentam aquele setor, mais os meses em que há marco terminando. É a
+    resposta para "quando esse dinheiro sai" — a pergunta que o estudo até
+    agora respondia com uma regra fixa.
+    """
+    linhas = q(s, """SELECT a.setor, min(m.inicio) AS inicio, max(m.fim) AS fim,
+                            count(*) AS marcos
+                       FROM marco m
+                       JOIN area_pdp a ON a.codigo = m.area_codigo
+                      WHERE m.empreendimento_id = :e AND a.setor IS NOT NULL
+                      GROUP BY a.setor""", e=emp_id)
+    return {l["setor"]: dict(l) for l in linhas}
+
+
+def pesos_por_setor(s: Session, emp_id: int, cenario_id: int) -> dict[str, dict]:
+    """
+    A distribuição mensal do custo de cada setor, lida do cronograma.
+
+    Duas fontes, nesta ordem de precisão:
+
+    1. **Item amarrado a um marco.** O valor sai no mês em que aquele marco
+       termina. É o gasto com data conhecida — a taxa que se paga no protocolo,
+       o evento que acontece num dia.
+    2. **O resto do setor**, repartido igualmente entre os meses em que a área
+       tem marco terminando. Não é curva de obra nem regra fixa: é o calendário
+       real daquela área.
+
+    Setor sem marco não entra no resultado — e aí o motor mantém a regra antiga
+    do setor, que é o comportamento correto quando não há cronograma.
+    """
+    itens = q(s, """SELECT ci.setor, ci.valor, m.fim
+                      FROM composicao_item ci
+                      LEFT JOIN marco m ON m.id = ci.marco_id
+                     WHERE ci.cenario_id = :c""", c=cenario_id)
+    marcos = q(s, """SELECT a.setor, m.fim
+                       FROM marco m
+                       JOIN area_pdp a ON a.codigo = m.area_codigo
+                      WHERE m.empreendimento_id = :e AND a.setor IS NOT NULL
+                        AND m.fim IS NOT NULL""", e=emp_id)
+
+    meses_do_setor: dict[str, list] = {}
+    for l in marcos:
+        meses_do_setor.setdefault(l["setor"], []).append(fim_mes(l["fim"]))
+
+    datado: dict[str, dict] = {}
+    solto: dict[str, float] = {}
+    for i in itens:
+        setor, valor = i["setor"], float(i["valor"])
+        if i["fim"]:
+            mes = fim_mes(i["fim"])
+            datado.setdefault(setor, {})[mes] = datado.setdefault(setor, {}).get(mes, 0.0) + valor
+        else:
+            solto[setor] = solto.get(setor, 0.0) + valor
+
+    saida: dict[str, dict] = {}
+    for setor in set(datado) | set(solto):
+        meses = meses_do_setor.get(setor) or []
+        if not meses and setor not in datado:
+            continue                      # sem cronograma: o motor usa a regra antiga
+        acum = dict(datado.get(setor, {}))
+        resto = solto.get(setor, 0.0)
+        if resto and meses:
+            fatia = resto / len(meses)
+            for m in meses:
+                acum[m] = acum.get(m, 0.0) + fatia
+        elif resto:
+            continue                      # há valor sem marco e sem calendário
+        total = sum(acum.values())
+        if total > 0:
+            saida[setor] = {m: v / total for m, v in acum.items()}
+    return saida
+
+
+def carregar_premissas(s: Session, cenario: dict, emp: dict,
+                       pesos: Optional[dict] = None) -> Premissas:
     linhas = q(s, "SELECT chave, valor FROM premissa WHERE cenario_id = :c",
                c=cenario["id"])
     v = {l["chave"]: float(l["valor"]) for l in linhas}
@@ -200,6 +288,10 @@ def carregar_premissas(s: Session, cenario: dict, emp: dict) -> Premissas:
     for setor, total in somar_composicoes(s, cenario["id"]).items():
         if hasattr(p, setor):
             setattr(p, setor, total)
+
+    # Quando o cronograma do PDP diz em que meses aquele setor acontece, o
+    # motor usa esse calendário em vez da regra fixa do setor.
+    p.pesos_setor = dict(pesos or {})
     if "financiamento_prazo_amort" in v:
         p.financiamento_prazo_amort = int(v["financiamento_prazo_amort"])
     if "meses_pos_chaves" in v:
@@ -264,7 +356,8 @@ def carregar_entradas(s: Session, cenario_id: int) -> EntradasCenario:
 
     return EntradasCenario(
         empreendimento=emp, cenario=cen,
-        premissas=carregar_premissas(s, cen, emp),
+        premissas=carregar_premissas(s, cen, emp,
+                                     pesos=pesos_por_setor(s, emp["id"], cen["id"])),
         tabela=tabela, tabela_investidor=tab_inv,
         unidades=carregar_unidades(s, emp["id"]),
         obra=carregar_obra(s, emp["id"]),

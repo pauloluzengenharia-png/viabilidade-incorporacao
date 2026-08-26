@@ -15,6 +15,19 @@
 
 {% include "_cabeca_lista.html" %}
 
+{% if janela and janela.marcos %}
+<div class="aviso calmo"><span><b>No cronograma.</b> Este setor aparece em
+  {{ janela.marcos }} marco(s) do PDP, de {{ janela.inicio|mes }} a
+  {{ janela.fim|mes }}. Item sem marco escolhido se distribui igualmente pelos
+  meses em que a área tem marco terminando; item com marco sai inteiro no mês
+  daquele marco{% if janela.com_marco %} — {{ janela.com_marco }} de
+  {{ janela.total }} já estão amarrados{% endif %}.</span></div>
+{% elif marcos %}
+<div class="aviso calmo"><span><b>Sem marco para este setor.</b> O cronograma
+  está sincronizado, mas nenhuma área ligada a este setor tem marco. O
+  desembolso segue a regra fixa do setor até que isso mude no PDP.</span></div>
+{% endif %}
+
 <form method="post"
       action="/empreendimento/{{ emp.id }}/dados/custos/{{ setor.codigo }}?cenario={{ cenario.id }}">
   <div class="rolagem">
@@ -25,7 +38,8 @@
         <th style="width:90px">Unidade</th>
         <th class="n" style="width:150px">Valor unitário</th>
         <th class="n" style="width:160px">Total</th>
-        <th style="min-width:180px">Observação</th>
+        <th style="min-width:170px">Marco do cronograma</th>
+        <th style="min-width:150px">Observação</th>
         <th style="width:52px"></th>
       </tr></thead>
       <tbody>
@@ -45,6 +59,13 @@
             <span class="adorno" aria-hidden="true">R$</span>
             <input type="text" inputmode="decimal" autocomplete="off" name="valor"
                    data-formato="moeda" value="{{ i.valor|dinheiro }}"></span></td>
+          <td>{% if marcos %}<select name="marco_id" class="marco">
+            <option value="">— pela janela do setor —</option>
+            {% for mk in marcos %}
+            <option value="{{ mk.id }}" {{ 'selected' if mk.id == i.marco_id }}>{{ mk.pdp_id }} · {{ mk.nome }}{% if mk.fim %} ({{ mk.fim|mes }}){% endif %}</option>
+            {% endfor %}
+          </select>{% else %}<input type="hidden" name="marco_id" value="">
+            <span class="sem-marco">sem cronograma</span>{% endif %}</td>
           <td><input type="text" name="observacao" value="{{ i.observacao or '' }}"></td>
           <td><button type="button" class="apagar" title="Remover o item"
                       aria-label="Remover o item">&times;</button></td>
@@ -60,6 +81,13 @@
           <td class="numerico"><span class="com-adorno tem-adorno">
             <span class="adorno" aria-hidden="true">R$</span>
             <input type="text" inputmode="decimal" autocomplete="off" name="valor" data-formato="moeda" value=""></span></td>
+          <td>{% if marcos %}<select name="marco_id" class="marco">
+            <option value="">— pela janela do setor —</option>
+            {% for mk in marcos %}
+            <option value="{{ mk.id }}" {{ 'selected' if mk.id == None }}>{{ mk.pdp_id }} · {{ mk.nome }}{% if mk.fim %} ({{ mk.fim|mes }}){% endif %}</option>
+            {% endfor %}
+          </select>{% else %}<input type="hidden" name="marco_id" value="">
+            <span class="sem-marco">sem cronograma</span>{% endif %}</td>
           <td><input type="text" name="observacao" value=""></td>
           <td><button type="button" class="apagar" aria-label="Remover o item">&times;</button></td>
         </tr>
@@ -119,6 +147,7 @@
   document.getElementById("mais-um").addEventListener("click", () => {
     const nova = corpo.lastElementChild.cloneNode(true);
     nova.querySelectorAll("input").forEach(i => i.value = "");
+    nova.querySelectorAll("select").forEach(s => s.selectedIndex = 0);
     corpo.appendChild(nova); conta();
     nova.querySelector('[name="descricao"]').focus();
   });

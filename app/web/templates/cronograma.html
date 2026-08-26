@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block titulo %}Cronograma — {{ emp.nome }}{% endblock %}
+{% block conteudo %}
+{% include "_barra_dados.html" %}
+
+<div class="regua"></div>
+<h1>Cronograma</h1>
+<p class="sub">Os marcos do PDP, agrupados pela área que responde por eles e
+  ligados ao setor de custo que paga aquele trabalho. É daqui que sai a resposta
+  para <b>quando</b> o dinheiro de cada setor sai — a pergunta que o estudo,
+  antes disto, respondia com uma regra fixa.</p>
+
+<div class="acoes" style="margin:1.4rem 0 1.8rem; align-items:center">
+  <form method="post" action="/empreendimento/{{ emp.id }}/dados/cronograma/sincronizar">
+    <button class="principal" type="submit" {{ 'disabled' if not configurado }}>
+      Sincronizar com o PDP</button>
+  </form>
+  {% if ultima %}
+  <span class="legenda-tab" style="margin:0">
+    Última tentativa em {{ ultima.quando.strftime('%d/%m/%Y às %H:%M') }} por
+    {{ ultima.autor }} — {% if ultima.ok %}deu certo{% else %}<b>falhou</b>{% endif %}.
+  </span>
+  {% endif %}
+</div>
+
+{% if not configurado %}
+<div class="aviso"><span><b>A leitura do PDP não está configurada.</b>
+  O sistema precisa de um usuário do PDP para ler o cronograma. Crie um usuário
+  de leitura lá, e configure <code>PDP_EMAIL</code> e <code>PDP_SENHA</code> nas
+  variáveis de ambiente do serviço. A senha não passa por esta tela nem fica
+  gravada no banco.</span></div>
+{% endif %}
+
+{% if ultima and not ultima.ok %}
+<div class="aviso"><span><b>A última sincronização falhou.</b>
+  {{ ultima.mensagem }}</span></div>
+{% elif ultima and ultima.ok %}
+<div class="aviso calmo"><span>{{ ultima.mensagem }}</span></div>
+{% endif %}
+
+{% if not areas %}
+<div class="vazio">
+  <p><b>Nenhum marco sincronizado ainda.</b></p>
+  <p class="sub">Enquanto não houver cronograma, cada setor de custo desembolsa
+    pela regra fixa que está no seu cadastro — diluído na obra, no lançamento, à
+    vista ou na entrega. Funciona; só não é o calendário real.</p>
+</div>
+{% else %}
+
+<p class="legenda-tab" style="margin:0 0 1rem">
+  Uma área sem setor não gera custo próprio no estudo: ou o trabalho dela já
+  está orçado em outro lugar — Engenharia é a EAP da obra — ou ela produz o
+  preço dos outros, como o Orçamento.
+</p>
+
+{% for a in areas %}
+<section class="area">
+  <div class="area-cabeca">
+    <div>
+      <h2>{{ a.nome }}</h2>
+      {% if a.papel %}<p class="papel">{{ a.papel|enfase }}</p>{% endif %}
+    </div>
+    <div class="area-meta">
+      {% if a.setor %}
+      <a class="etiqueta" href="/empreendimento/{{ emp.id }}/dados/custos/{{ a.setor }}">
+        paga em {{ a.setor_nome }}</a>
+      {% else %}
+      <span class="etiqueta neutra">sem setor de custo</span>
+      {% endif %}
+      <span class="conta">{{ a.n }} marco{{ '' if a.n == 1 else 's' }}{% if a.criticos %} · {{ a.criticos }} no caminho crítico{% endif %}</span>
+      {% if a.inicio and a.fim %}
+      <span class="janela">{{ a.inicio|mes }} → {{ a.fim|mes }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="rolagem">
+    <table>
+      <thead><tr>
+        <th style="width:64px">ID</th>
+        <th class="conta">Marco</th>
+        <th style="width:110px">Início</th>
+        <th style="width:110px">Fim</th>
+        <th class="n" style="width:70px">Dias</th>
+        <th class="n" style="width:80px">Feito</th>
+        <th style="width:150px">Processo</th>
+      </tr></thead>
+      <tbody>
+      {% for m in a.marcos %}
+        <tr class="{{ 'critico' if m.critico }}">
+          <td class="mono">{{ m.pdp_id }}</td>
+          <td class="conta">{{ m.nome }}{% if m.critico %}
+            <span class="cp" title="No caminho crítico do cenário reprogramado">CP</span>{% endif %}</td>
+          <td class="mono">{{ m.inicio.strftime('%d/%m/%y') if m.inicio else '—' }}</td>
+          <td class="mono">{{ m.fim.strftime('%d/%m/%y') if m.fim else '—' }}</td>
+          <td class="n">{{ m.duracao or '—' }}</td>
+          <td class="n">{{ m.progresso }}%</td>
+          <td class="fraco">{{ m.processo or '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+
+<p class="legenda-tab">
+  O estudo não recalcula cronograma — quem faz isso é o PDP. Aqui as datas são
+  lidas e usadas para distribuir o desembolso; reprogramou lá, sincronize aqui e
+  recalcule o cenário para ver o efeito no caixa.
+</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+  .area{margin-bottom:2.6rem}
+  .area-cabeca{display:flex; justify-content:space-between; align-items:flex-start;
+    gap:1.5rem; flex-wrap:wrap; margin-bottom:.8rem}
+  .area-cabeca h2{margin:0 0 .25rem}
+  .area .papel{margin:0; color:var(--tinta-3); font-size:.86rem; max-width:64ch}
+  .area-meta{display:flex; flex-direction:column; align-items:flex-end; gap:.35rem;
+    font-size:.8rem; white-space:nowrap}
+  .etiqueta{display:inline-block; padding:.15rem .6rem; border-radius:999px;
+    border:1px solid var(--fio-forte); text-decoration:none; color:var(--tinta-2);
+    font-size:.78rem}
+  .etiqueta:hover{border-color:var(--tinta); color:var(--tinta)}
+  .etiqueta.neutra{color:var(--tinta-3); border-style:dashed}
+  .area-meta .conta,.area-meta .janela{color:var(--tinta-3);
+    font-variant-numeric:tabular-nums}
+  td.mono{font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums;
+    font-size:.84rem; color:var(--tinta-2)}
+  tr.critico td.conta{font-weight:600}
+  .cp{font-size:.62rem; letter-spacing:.09em; border:1px solid var(--realizado);
+    color:var(--realizado); border-radius:3px; padding:0 .25rem; margin-left:.4rem;
+    vertical-align:1px}
+  .vazio{background:var(--cartao); border:1px solid var(--fio); border-radius:12px;
+    padding:2rem; text-align:center}
+  .vazio .sub{max-width:56ch; margin:.6rem auto 0}
+</style>
+{% endblock %}

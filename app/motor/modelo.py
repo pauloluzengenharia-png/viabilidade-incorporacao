@@ -239,6 +239,18 @@ class Premissas:
     outras_desp_adm_perc: float = 0.015      # L44 — sobre o custo raso
     outras_entradas: float = 117.95          # M45
 
+    # --- pós-entrega ---
+    # Vistorias, brindes, evento de entrega, AGI, acompanhamento do síndico e
+    # apoio ao repasse. Acontece quase todo depois da última chave, quando a
+    # obra já não desembolsa nada — por isso não podia morar em nenhum dos
+    # outros setores sem distorcer a data.
+    pos_entrega: float = 0.0
+
+    # --- quando cada setor desembolsa, lido do cronograma ---
+    # {setor: {mês: fração}}. Vem dos marcos do PDP; vazio significa "não há
+    # cronograma para este setor", e aí vale a regra fixa de sempre.
+    pesos_setor: dict = field(default_factory=dict)
+
     # --- financiamento à produção ---
     financiamento_limite: float = 0.0        # VM D199
     financiamento_juros_aa: float = 0.22     # VM D195
