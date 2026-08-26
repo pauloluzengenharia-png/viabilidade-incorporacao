@@ -14,10 +14,15 @@ services:
     healthCheckPath: /saude
     autoDeploy: true
     envVars:
+      # O banco NAO e mais o Postgres do Render: o plano gratuito dele expira
+      # (o atual morre em 24/09/2026) e os dados juntos. A DATABASE_URL agora e
+      # definida no painel (Environment) e aponta para um Postgres externo sem
+      # data de validade — hoje, um projeto no Neon (neon.tech, plano free).
+      # A troca de banco e: criar o projeto novo, colar a connection string
+      # aqui, e restaurar o backup em /admin/carga. A senha do banco mora so
+      # no painel — nunca no repositorio.
       - key: DATABASE_URL
-        fromDatabase:
-          name: viabilidade-db
-          property: connectionString
+        sync: false
       - key: PYTHON_VERSION
         value: "3.11.9"
       # sem VIAB_SENHA o sistema sobe bloqueado, de proposito.
@@ -27,6 +32,10 @@ services:
       - key: VIAB_SENHA
         sync: false
 
+# O Postgres do Render fica de pe como reserva ate 24/09/2026, quando o plano
+# gratuito o apaga. Depois do corte para o banco externo estar confirmado, este
+# bloco pode sair — mas NAO antes: remover recurso do blueprint pode apaga-lo,
+# e ele e o plano B enquanto a migracao nao estiver conferida.
 databases:
   - name: viabilidade-db
     plan: free
