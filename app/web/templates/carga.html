@@ -3,7 +3,55 @@
 {% block conteudo %}
 
 <div class="regua"></div>
-<h1>Carga inicial de uma SPE</h1>
+<h1>Administração dos dados</h1>
+
+<div class="regua" style="margin-top:2.2rem"></div>
+<h2>Backup e restauração</h2>
+<p class="sub">
+  O banco vive num serviço de nuvem, e serviço de nuvem tem letra miúda —
+  plano que expira, projeto que pausa. A defesa é o dado ter sempre uma cópia
+  que só a MMI controla: <b>baixe o backup e guarde</b>. O mesmo arquivo também
+  é o caminho de migração entre provedores: baixa aqui, restaura lá, e a senha
+  do banco não passa por ninguém.
+</p>
+
+{% if erro_backup %}
+<div class="aviso"><span><b>A restauração não aconteceu.</b> {{ erro_backup }}</span></div>
+{% endif %}
+
+{% if restaurado %}
+<div class="aviso calmo"><span><b>Restaurado.</b> {{ restaurado }} —
+  {{ linhas_restauradas }} linhas em {{ tabelas_restauradas }} tabelas.
+  Confira a viabilidade antes de confiar: os números têm de ser os mesmos do
+  ambiente de origem.</span></div>
+{% endif %}
+
+<div class="acoes" style="align-items:flex-end; gap:2rem; flex-wrap:wrap">
+  <div>
+    <p style="margin:0 0 .5rem"><a class="botao principal" href="/admin/backup"
+      download>Baixar backup completo</a></p>
+    <p class="legenda-tab" style="margin:0">Um JSON com todas as tabelas.
+      Guarde com data no nome, fora do provedor.</p>
+  </div>
+
+  <form method="post" action="/admin/restaurar" enctype="multipart/form-data"
+        class="acoes" style="align-items:flex-end; gap:.8rem; margin:0">
+    <label class="campo"><span class="rot">Arquivo de backup</span>
+      <input type="file" name="arquivo" accept=".json,application/json" required></label>
+    <label class="campo" style="width:150px"><span class="rot">Digite «restaurar»</span>
+      <input type="text" name="confirmo" autocomplete="off" required></label>
+    <button type="submit">Restaurar</button>
+  </form>
+</div>
+<p class="legenda-tab" style="margin-top:.8rem">
+  <b>Restaurar substitui tudo</b> que está neste banco pelo conteúdo do
+  arquivo — é tudo-ou-nada: qualquer linha recusada desfaz a operação inteira.
+  A palavra de confirmação existe porque um clique distraído não pode custar um
+  banco.
+</p>
+
+<div class="regua" style="margin-top:2.2rem"></div>
+<h2>Carga inicial</h2>
 <p class="sub">
   Esta tela existe para o <b>primeiro</b> empreendimento entrar no sistema sem
   passar por linha de comando — sem precisar da senha do banco na sua máquina.

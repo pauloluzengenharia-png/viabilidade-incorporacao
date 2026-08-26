@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import json
 import pathlib
 from typing import Optional
 
@@ -815,6 +816,73 @@ async def novo(request: Request, s: Session = Depends(sessao)):
              f"Abra o empreendimento e clique em Recalcular."], 422)
 
     return RedirectResponse(f"/empreendimento/{emp}", status_code=303)
+
+
+# ==================================================================== backup
+@app.get("/admin/backup")
+def baixar_backup(s: Session = Depends(sessao)):
+    """
+    O banco inteiro num arquivo JSON, para guardar fora de provedor nenhum.
+
+    É também o veículo da migração entre provedores: o dado viaja pelo
+    navegador de quem está logado, e a senha do banco não passa por pessoa
+    nenhuma — nem por quem opera, nem por quem ajudou a construir isto.
+    """
+    from fastapi.responses import Response
+    from . import salvaguarda
+
+    dados = salvaguarda.exportar(s)
+    nome = f"viabilidade-backup-{dados['gerado_em'][:10]}.json"
+    return Response(
+        json.dumps(dados, ensure_ascii=False),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+@app.post("/admin/restaurar", response_class=HTMLResponse)
+async def restaurar_backup(request: Request, arquivo: UploadFile = File(...),
+                           confirmo: str = Form(""),
+                           s: Session = Depends(sessao),
+                           autor: str = Depends(usuario_atual)):
+    """
+    Substitui o banco pelo conteúdo de um backup. Tudo-ou-nada.
+
+    A palavra digitada é a trava: restaurar apaga o que está no banco antes de
+    gravar o arquivo, e um clique distraído não pode custar isso.
+    """
+    from . import salvaguarda
+
+    ctx = {"ja_tem": _tem_empreendimento(s)}
+    if confirmo.strip().lower() != "restaurar":
+        ctx["erro_backup"] = ("digite a palavra «restaurar» no campo de "
+                              "confirmação — é ela que separa a intenção do clique.")
+        return templates.TemplateResponse(request, "carga.html", ctx, status_code=422)
+
+    try:
+        dados = json.loads((await arquivo.read()).decode("utf-8-sig"))
+        gravadas = salvaguarda.restaurar(s, dados)
+        s.commit()
+    except (salvaguarda.ArquivoDeBackupInvalido, json.JSONDecodeError) as e:
+        s.rollback()
+        ctx["erro_backup"] = str(e)
+        return templates.TemplateResponse(request, "carga.html", ctx, status_code=422)
+    except Exception as e:                          # noqa: BLE001 — a tela mostra
+        s.rollback()
+        ctx["erro_backup"] = (f"o banco recusou uma linha e a restauração foi "
+                              f"desfeita por inteiro: {e}")
+        return templates.TemplateResponse(request, "carga.html", ctx, status_code=422)
+
+    q(s, """INSERT INTO alteracao (empreendimento_id, modulo, entidade, campo,
+                                   valor_novo, autor)
+            SELECT id, 'admin', 'banco', 'restaurado de backup', :v, :a
+              FROM empreendimento""",
+      v=salvaguarda.resumo(dados), a=autor)
+    s.commit()
+    ctx.update(ja_tem=_tem_empreendimento(s),
+               restaurado=salvaguarda.resumo(dados),
+               tabelas_restauradas=sum(1 for n in gravadas.values() if n),
+               linhas_restauradas=sum(gravadas.values()))
+    return templates.TemplateResponse(request, "carga.html", ctx)
 
 
 # ================================================================ carga inicial
