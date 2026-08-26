@@ -442,13 +442,32 @@ def dados_do_gantt(s: Session, emp_id: int, cenario_id: int) -> dict:
             "pela_media": float(media) * n if media is not None else None,
         })
 
+    deps = dependencias_do_empreendimento(s, emp_id)
+    fol = folgas(marcos, deps)
+    viz = vizinhos(marcos, deps)
+    for m in marcos:
+        f = fol.get(m["pdp_id"])
+        m["folga_total"] = f["total"] if f else None
+        m["folga_livre"] = f["livre"] if f else None
+        m["antes"] = viz.get(m["pdp_id"], {}).get("antes", [])
+        m["depois"] = viz.get(m["pdp_id"], {}).get("depois", [])
+
+    # o caminho crítico que a folga aponta e o que o PDP marcou podem discordar:
+    # dias corridos aqui, dias úteis lá. Mostrar a divergência é mais útil do
+    # que escolher em silêncio qual das duas leituras vale.
+    pela_folga = {m["pdp_id"] for m in marcos if m.get("folga_total") == 0}
+    pelo_pdp = {m["pdp_id"] for m in marcos if m["critico"]}
+
     return {
         "marcos": marcos,
         "setores": resumo_setores,
-        "dependencias": dependencias_do_empreendimento(s, emp_id),
+        "dependencias": deps,
         "hoje": hoje,
         "atual": _marco_de_hoje(marcos, hoje),
         "ajustes": ajuste,
+        "criticos_pdp": len(pelo_pdp),
+        "criticos_folga": len(pela_folga),
+        "divergentes": sorted(pela_folga ^ pelo_pdp),
     }
 
 
@@ -635,3 +654,131 @@ def para_json(dados: dict) -> str:
 
     bruto = json.dumps(dados, default=conv, ensure_ascii=False)
     return bruto.replace("</", "<\\/").replace("<!--", "<\\!--")
+
+
+# =====================================================================
+# folga: quanto cada marco pode atrasar sem consequência
+# =====================================================================
+def dias_uteis(de, ate) -> int:
+    """
+    Quantos dias úteis separam duas datas. Negativo quando `ate` vem antes.
+
+    Sábado e domingo não contam. Feriado conta — o sistema não tem calendário de
+    feriados, e inventar um erraria mais do que ignorar. Para medir folga, o
+    erro de alguns feriados é ruído; para prometer data, quem manda é o PDP.
+    """
+    import datetime as dt
+    if ate < de:
+        return -dias_uteis(ate, de)
+    inteiras, resto = divmod((ate - de).days, 7)
+    n = inteiras * 5
+    d = de
+    for _ in range(resto):
+        d += dt.timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return n
+
+
+def somar_uteis(data, n: int):
+    """A data que fica `n` dias úteis depois (ou antes, se `n` for negativo)."""
+    import datetime as dt
+    passo = 1 if n >= 0 else -1
+    faltam, d = abs(n), data
+    while faltam:
+        d += dt.timedelta(days=passo)
+        if d.weekday() < 5:
+            faltam -= 1
+    return d
+
+
+def folgas(marcos: list[dict], dependencias: dict[str, list]) -> dict[str, dict]:
+    """
+    Folga total e folga livre de cada marco, em **dias úteis**.
+
+    **Folga total** é quanto o marco pode atrasar sem empurrar a entrega do
+    projeto. **Folga livre** é quanto pode atrasar sem empurrar nem o sucessor
+    mais apertado — sempre menor ou igual à total. Zero nas duas é caminho
+    crítico: ali cada dia de atraso é um dia a mais no projeto.
+
+    A conta é uma passagem de trás para frente sobre as datas que o PDP já
+    publicou. O estudo não reprograma cronograma — mede a folga do que existe.
+    A unidade é dia útil porque é a do PDP: em dias corridos, uma tarefa de 220
+    dias úteis parece ter três meses de folga que não existem.
+
+    Feriado não entra, então os números podem diferir dos do PDP por alguns
+    dias. Por isso a tela mostra as duas leituras de caminho crítico — a do PDP
+    e a da folga — e avisa quando discordam.
+    """
+    por_id = {str(m["pdp_id"]): m for m in marcos if m.get("inicio") and m.get("fim")}
+    if not por_id:
+        return {}
+
+    sucessores: dict[str, list] = {}
+    for alvo, lista in dependencias.items():
+        for pred, tipo, lag in lista:
+            if pred in por_id and alvo in por_id:
+                sucessores.setdefault(pred, []).append((alvo, tipo, int(lag or 0)))
+
+    fim_projeto = max(m["fim"] for m in por_id.values())
+    dur = {k: dias_uteis(m["inicio"], m["fim"]) for k, m in por_id.items()}
+
+    ordem = _ordem_topologica(list(por_id.values()), dependencias)
+    lf: dict = {}
+
+    for pdp_id in reversed([i for i in ordem if i in por_id]):
+        limites = []
+        for suc, tipo, lag in sucessores.get(pdp_id, []):
+            if suc not in lf:
+                continue
+            ls_suc = somar_uteis(lf[suc], -dur[suc])
+            if tipo == "TI":                      # término → início
+                limites.append(somar_uteis(ls_suc, -(1 + lag)))
+            elif tipo == "II":                    # início → início
+                limites.append(somar_uteis(ls_suc, dur[pdp_id] - lag))
+            elif tipo == "TT":                    # término → término
+                limites.append(somar_uteis(lf[suc], -lag))
+            else:                                 # IT — início → término
+                limites.append(somar_uteis(lf[suc], dur[pdp_id] - lag))
+        lf[pdp_id] = min(limites) if limites else fim_projeto
+
+    saida = {}
+    for pdp_id, m in por_id.items():
+        total = dias_uteis(m["fim"], lf[pdp_id])
+        livres = []
+        for suc, tipo, lag in sucessores.get(pdp_id, []):
+            s_ini, s_fim = por_id[suc]["inicio"], por_id[suc]["fim"]
+            if tipo == "TI":
+                livres.append(dias_uteis(m["fim"], s_ini) - 1 - lag)
+            elif tipo == "II":
+                livres.append(dias_uteis(m["inicio"], s_ini) - lag)
+            elif tipo == "TT":
+                livres.append(dias_uteis(m["fim"], s_fim) - lag)
+            else:
+                livres.append(dias_uteis(m["inicio"], s_fim) - lag)
+        livre = min(livres) if livres else total
+        saida[pdp_id] = {
+            "total": max(total, 0),
+            "livre": max(min(livre, total), 0),
+            "limite": lf[pdp_id],
+            "sem_folga": total <= 0,
+        }
+    return saida
+
+
+def vizinhos(marcos: list[dict], dependencias: dict[str, list]) -> dict[str, dict]:
+    """Para cada marco, quem vem antes e quem vem depois, com nome e tipo."""
+    nomes = {str(m["pdp_id"]): m.get("nome", "") for m in marcos}
+    saida = {k: {"antes": [], "depois": []} for k in nomes}
+    for alvo, lista in dependencias.items():
+        for pred, tipo, lag in lista:
+            lag = int(lag or 0)
+            if alvo in saida:
+                saida[alvo]["antes"].append(
+                    {"pdp_id": pred, "nome": nomes.get(pred, "(fora do recorte)"),
+                     "tipo": tipo, "lag": lag})
+            if pred in saida:
+                saida[pred]["depois"].append(
+                    {"pdp_id": alvo, "nome": nomes.get(alvo, ""), "tipo": tipo,
+                     "lag": lag})
+    return saida

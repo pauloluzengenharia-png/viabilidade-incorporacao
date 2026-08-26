@@ -433,3 +433,102 @@ def test_a_rodada_enxerga_o_cronograma(s, emp, cenario, composicao_limpa,
     finally:
         q(s, "DELETE FROM cenario WHERE id = ANY(:c)", c=[a, b])
         s.commit()
+
+
+# =====================================================================
+# folga
+# =====================================================================
+@pytest.mark.parametrize("de,ate,esperado", [
+    ("2027-06-03", "2027-06-03", 0),
+    ("2027-06-03", "2027-06-04", 1),
+    ("2027-06-04", "2027-06-07", 1),      # sexta → segunda: um dia útil
+    ("2027-06-03", "2027-06-10", 5),
+    ("2027-06-10", "2027-06-03", -5),
+])
+def test_dias_uteis_pula_o_fim_de_semana(de, ate, esperado):
+    import datetime as dt
+    from app.cronograma import dias_uteis
+    assert dias_uteis(dt.date.fromisoformat(de), dt.date.fromisoformat(ate)) == esperado
+
+
+def test_somar_uteis_e_o_inverso_de_dias_uteis():
+    import datetime as dt
+    from app.cronograma import dias_uteis, somar_uteis
+    base = dt.date(2027, 6, 3)
+    for n in (0, 1, 5, 22, -7):
+        assert dias_uteis(base, somar_uteis(base, n)) == n
+
+
+def test_folga_zero_no_caminho_unico():
+    """Numa corrente sem alternativa, todo mundo é crítico."""
+    import datetime as dt
+    from app.cronograma import folgas
+    d = dt.date
+    marcos = [{"pdp_id": "A", "inicio": d(2027, 1, 4), "fim": d(2027, 1, 8)},
+              {"pdp_id": "B", "inicio": d(2027, 1, 11), "fim": d(2027, 1, 15)}]
+    f = folgas(marcos, {"B": [("A", "TI", 0)]})
+    assert f["A"]["total"] == 0 and f["A"]["livre"] == 0
+    assert f["B"]["total"] == 0
+
+
+def test_o_caminho_curto_tem_folga_e_o_longo_nao():
+    """
+    A destrava B e C; os dois desembocam em D. O ramo curto sobra tempo — e é
+    exatamente isso que a folga precisa mostrar para alguém saber onde apertar.
+    """
+    import datetime as dt
+    from app.cronograma import folgas
+    d = dt.date
+    marcos = [
+        {"pdp_id": "A", "inicio": d(2027, 1, 4), "fim": d(2027, 1, 8)},
+        {"pdp_id": "curto", "inicio": d(2027, 1, 11), "fim": d(2027, 1, 15)},
+        {"pdp_id": "longo", "inicio": d(2027, 1, 11), "fim": d(2027, 2, 12)},
+        {"pdp_id": "D", "inicio": d(2027, 2, 15), "fim": d(2027, 2, 19)},
+    ]
+    deps = {"curto": [("A", "TI", 0)], "longo": [("A", "TI", 0)],
+            "D": [("curto", "TI", 0), ("longo", "TI", 0)]}
+    f = folgas(marcos, deps)
+    assert f["longo"]["total"] == 0, "o ramo longo manda no prazo"
+    assert f["curto"]["total"] == 20, "o ramo curto sobra quatro semanas úteis"
+    assert f["curto"]["livre"] == 20
+    assert f["A"]["total"] == 0 and f["D"]["total"] == 0
+
+
+def test_folga_livre_e_menor_que_a_total_quando_o_sucessor_e_quem_sobra():
+    """
+    A → B, e B tem folga própria. A pode atrasar até encostar em B sem
+    consequência nenhuma (folga livre), e além disso só às custas da folga de B
+    (folga total). Confundir as duas é prometer prazo que não existe.
+    """
+    import datetime as dt
+    from app.cronograma import folgas
+    d = dt.date
+    marcos = [{"pdp_id": "A", "inicio": d(2027, 1, 4), "fim": d(2027, 1, 8)},
+              {"pdp_id": "B", "inicio": d(2027, 1, 25), "fim": d(2027, 1, 29)},
+              {"pdp_id": "fim", "inicio": d(2027, 3, 1), "fim": d(2027, 3, 5)}]
+    deps = {"B": [("A", "TI", 0)], "fim": [("B", "TI", 0)]}
+    f = folgas(marcos, deps)
+    assert f["A"]["livre"] == 10, "dez dias úteis até encostar em B"
+    assert f["A"]["total"] > f["A"]["livre"], "além disso, come a folga de B"
+
+
+def test_a_folga_concorda_com_o_caminho_critico_do_pdp(s, emp):
+    """
+    A prova de que a conta está certa: o caminho crítico que a folga aponta tem
+    de ser o mesmo que o PDP marcou. São dois cálculos independentes — um feito
+    lá, outro aqui — e eles precisam chegar no mesmo conjunto de marcos.
+
+    Diferença aqui costuma ser feriado, que esta conta não conhece. Diferença
+    grande é erro de leitura dos vínculos.
+    """
+    from app.cronograma import dados_do_gantt
+    cen = q(s, """SELECT id FROM cenario WHERE empreendimento_id = :e
+                   AND tipo = 'projecao' ORDER BY id LIMIT 1""", e=emp)
+    if not cen:
+        pytest.skip("empreendimento sem cenário de projeção")
+    d = dados_do_gantt(s, emp, cen[0]["id"])
+    if not d["marcos"] or not d["criticos_pdp"]:
+        pytest.skip("empreendimento sem cronograma sincronizado")
+    assert not d["divergentes"], (
+        f"o PDP marca {d['criticos_pdp']} marcos como críticos e a folga aponta "
+        f"{d['criticos_folga']}; divergem: {d['divergentes'][:10]}")
