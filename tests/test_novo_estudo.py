@@ -66,3 +66,27 @@ def test_calendario():
     assert somar_meses(dt.date(2026, 1, 15), 0) == dt.date(2026, 1, 31)
     assert somar_meses(dt.date(2026, 11, 1), 2) == dt.date(2027, 1, 31)
     assert somar_meses(dt.date(2026, 12, 1), 1) == dt.date(2027, 1, 31)
+
+
+def test_estudo_novo_nao_herda_custo_de_ninguem():
+    """
+    Os defaults do motor eram os da Kiev — o que fazia sentido enquanto toda
+    premissa existia como linha no banco. Desde que os setores de custo passaram
+    a vir da composição (migrations 010 e 011), um default herdado entra calado:
+    o cadastro do Gante nasceu com R$ 1,5 milhão de decoração e um terreno de
+    R$ 3,45 milhões que ninguém digitou.
+
+    Um estudo novo começa em zero. Zero é uma composição vazia esperando ser
+    preenchida; qualquer outro número é o custo de outro empreendimento.
+    """
+    from app.motor.modelo import Premissas
+    p = Premissas()
+    for setor in ("despesas_comerciais", "decoracao", "projetos_e_outros",
+                  "marketing_stand", "marketing_propaganda", "pos_entrega",
+                  "regularizacao_fundiaria", "legalizacao", "outras_entradas"):
+        assert getattr(p, setor) == 0.0, (
+            f"{setor} nasce com valor de fábrica — um estudo novo herdaria "
+            f"custo de outro empreendimento sem ninguém perceber")
+    assert p.terreno_parcelas == [], (
+        "terreno com parcela de fábrica: um estudo sem terreno cadastrado "
+        "mostraria o terreno da Kiev")

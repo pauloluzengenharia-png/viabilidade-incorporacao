@@ -213,11 +213,16 @@ class Premissas:
     # --- deduções da receita ---
     ret: float = 0.045                       # L26 — RET/patrimônio de afetação
     distratos: float = 0.0                   # L27
-    despesas_comerciais: float = 30_750.0    # M28 — valor fixo
+    # Zero de propósito: desde a migration 011 estes custos vêm da composição do
+    # setor, e um default herdado da Kiev entraria calado num estudo novo — foi
+    # o que aconteceu no cadastro do Gante, que nasceu com R$ 1,5 M de decoração
+    # sem ninguém ter digitado nada.
+    despesas_comerciais: float = 0.0         # composição do setor
 
     # --- terreno ---
-    terreno_parcelas: list[float] = field(
-        default_factory=lambda: [2_200_000, 350_000, 350_000, 300_000, 250_000])  # M34
+    # também vazio de propósito: sem parcela cadastrada, terreno é zero, não é
+    # o terreno de outro empreendimento
+    terreno_parcelas: list[float] = field(default_factory=list)
     terreno_registro_perc: float = 0.025     # L35 — sobre o pagamento em dinheiro
 
     # --- taxas do incorporador ---
@@ -232,12 +237,12 @@ class Premissas:
     regularizacao_fundiaria: float = 0.0     # composição do setor
     legalizacao: float = 0.0                 # composição do setor
 
-    decoracao: float = 1_545_045.14          # M40
-    projetos_e_outros: float = 2_899_156.99  # M41
+    decoracao: float = 0.0                       # composição do setor
+    projetos_e_outros: float = 0.0                       # composição do setor
     marketing_stand: float = 0.0             # M42
-    marketing_propaganda: float = 1_545_045.14  # M43
+    marketing_propaganda: float = 0.0                       # composição do setor
     outras_desp_adm_perc: float = 0.015      # L44 — sobre o custo raso
-    outras_entradas: float = 117.95          # M45
+    outras_entradas: float = 0.0             # premissa do cenário
 
     # --- pós-entrega ---
     # Vistorias, brindes, evento de entrega, AGI, acompanhamento do síndico e
