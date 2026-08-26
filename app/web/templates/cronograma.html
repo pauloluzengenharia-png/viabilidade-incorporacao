@@ -12,9 +12,13 @@
 
 <div class="acoes" style="margin:1.4rem 0 1.8rem; align-items:center">
   <form method="post" action="/empreendimento/{{ emp.id }}/dados/cronograma/sincronizar">
-    <button class="principal" type="submit" {{ 'disabled' if not configurado }}>
+    <button class="principal" type="submit"
+            {{ 'disabled' if not configurado or not emp.pdp_project_id }}>
       Sincronizar com o PDP</button>
   </form>
+  {% if emp.pdp_project_id %}
+  <span class="legenda-tab" style="margin:0">projeto {{ emp.pdp_project_id }} no PDP</span>
+  {% endif %}
   {% if ultima %}
   <span class="legenda-tab" style="margin:0">
     Última tentativa em {{ ultima.quando.strftime('%d/%m/%Y às %H:%M') }} por
@@ -30,6 +34,15 @@
     <input type="file" name="arquivo" accept=".json,application/json" required></label>
   <button type="submit">Importar arquivo</button>
 </form>
+
+{% if not emp.pdp_project_id %}
+<div class="aviso"><span><b>{{ emp.nome }} não tem projeto no PDP.</b>
+  O cronograma vem de lá pelo <b>código do projeto</b>, que é o número em
+  <code>project_id</code> na URL do PDP — preencha-o
+  <a href="/empreendimento/{{ emp.id }}/dados/cadastro">no cadastro</a>. Se este
+  empreendimento não existe no PDP, não há cronograma a buscar, e cada setor de
+  custo continua desembolsando pela regra fixa do seu cadastro.</span></div>
+{% endif %}
 
 {% if not configurado %}
 <div class="aviso"><span><b>A leitura do PDP não está configurada.</b>

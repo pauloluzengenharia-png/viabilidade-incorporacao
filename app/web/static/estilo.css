@@ -131,7 +131,9 @@ header.topo{background:var(--preto); color:var(--offwhite)}
 .marca .divisa{width:1px; height:18px; background:#3A3733}
 .marca span{font-size:.8rem; font-weight:400; color:var(--cinza);
   letter-spacing:.01em; white-space:nowrap}
-.topo .obra{font-size:.85rem; color:var(--areia); font-weight:500}
+.topo .obra{font-size:.85rem; color:var(--areia); font-weight:500;
+  text-decoration:none; border-bottom:1px solid transparent}
+.topo .obra:hover{border-bottom-color:var(--areia)}
 .sair{font-size:.76rem; letter-spacing:.09em; text-transform:uppercase;
   color:var(--cinza); text-decoration:none; font-weight:500;
   padding:.3rem .1rem}

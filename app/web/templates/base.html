@@ -30,7 +30,8 @@
       <span>Viabilidade de incorporação</span>
     </a>
     <span style="flex:1"></span>
-    {% if emp is defined and emp %}<span class="obra">{{ emp.nome }}</span>{% endif %}
+    {% if emp is defined and emp %}<a class="obra" href="/"
+      title="Trocar de empreendimento">{{ emp.nome }}</a>{% endif %}
     <a href="/guia" class="sair">Guia</a>
     <a href="/sair" class="sair">Sair</a>
     <button class="tema" type="button" aria-label="Alternar entre tema claro e escuro"
