@@ -139,7 +139,7 @@
   </p>
 </div>
 
-<div class="painel-marco" id="painel" hidden></div>
+<dialog class="modal-marco" id="painel" aria-labelledby="modal-titulo"></dialog>
 
 <h2 style="margin-top:2.4rem">Desembolso por
   {{ {'mes':'mês','trimestre':'trimestre','ano':'ano'}[passo] }}</h2>
@@ -399,75 +399,146 @@
         l.classList.toggle("aceso", l.dataset.id === selecionado)));
   }
 
-  // -------------------------------------------------------- painel do marco
-  const TIPO = {TI: "término → início", II: "início → início",
-                TT: "término → término", IT: "início → término"};
+  // --------------------------------------------------------- modal do marco
+  const TIPO = {
+    TI: {sigla: "TI", nome: "término → início",
+         diz: "só começa depois que o outro termina"},
+    II: {sigla: "II", nome: "início → início",
+         diz: "os dois começam juntos"},
+    TT: {sigla: "TT", nome: "término → término",
+         diz: "os dois terminam juntos"},
+    IT: {sigla: "IT", nome: "início → término",
+         diz: "só termina depois que o outro começa"},
+  };
 
   function elo(v, papel) {
     // do predecessor interessa quando ele termina — é o que me libera; do
     // sucessor, quando ele começa, que é o que eu seguro
     const m = porId[v.pdp_id];
-    const quando = !m ? "fora do recorte"
+    const quando = !m ? "fora deste recorte do cronograma"
       : papel === "antes" ? `termina ${br(m.fim)}` : `começa ${br(m.inicio)}`;
-    const lag = v.lag ? ` ${v.lag > 0 ? "+" : ""}${v.lag}d` : "";
-    const folga = m && m.folga_total === 0 ? ' <span class="cp">CP</span>' : "";
-    return `<li><button type="button" class="pula" data-ir="${v.pdp_id}"
-      ${m ? "" : "disabled"}><span class="cod">${v.pdp_id}</span>
-      <span class="txt">${esc(v.nome)}${folga}</span>
-      <span class="meta">${TIPO[v.tipo] || v.tipo}${lag} · ${quando}</span></button></li>`;
+    const t = TIPO[v.tipo] || {sigla: v.tipo, nome: v.tipo, diz: ""};
+    const lag = v.lag ? `, com ${Math.abs(v.lag)} dia${Math.abs(v.lag) > 1 ? "s" : ""} de ${v.lag > 0 ? "espera" : "adiantamento"}` : "";
+    const cp = m && m.folga_total === 0 ? ' <span class="cp">sem folga</span>' : "";
+    return `<li><button type="button" class="pula" data-ir="${v.pdp_id}" ${m ? "" : "disabled"}>
+      <span class="cod">${v.pdp_id}</span>
+      <span class="txt">${esc(v.nome)}${cp}</span>
+      <span class="meta"><b>${t.sigla}</b> ${t.nome}${lag} · ${quando}</span>
+      </button></li>`;
+  }
+
+  function campo(rot, valor, legenda, classe) {
+    return `<div class="${classe || ""}"><span class="rot">${rot}</span>
+      <b>${valor}</b><span class="nota">${legenda}</span></div>`;
   }
 
   function abrir(id) {
     const m = porId[id];
     if (!m) return;
     selecionado = id;
-    const folga = m.folga_total === null ? "—" : `${m.folga_total} dias úteis`;
-    const livre = m.folga_livre === null ? "—" : `${m.folga_livre} dias úteis`;
-    const estado = m.concluido ? "concluído" : (m.em_curso ? "em curso" : "a fazer");
-    painel.hidden = false;
+    const dias = n => n === null || n === undefined ? "—"
+      : `${n.toLocaleString("pt-BR")} dia${Math.abs(n) === 1 ? "" : "s"}`;
+    const estado = m.atrasado ? {cls: "atrasado", txt: "atrasado"}
+      : m.concluido ? {cls: "feito", txt: "concluído"}
+      : m.em_curso ? {cls: "curso", txt: "em curso"}
+      : {cls: "afazer", txt: "a fazer"};
+    const critico = m.folga_total === 0;
+
     painel.innerHTML = `
-      <div class="painel-topo">
-        <div>
-          <span class="rot">${m.pdp_id} · ${esc(m.area || "sem área")}
-            ${m.setor_nome ? "· paga em " + esc(m.setor_nome) : ""}</span>
-          <h3>${esc(m.nome)}</h3>
+      <form method="dialog" class="fecha-form"><button class="fechar" aria-label="Fechar">&times;</button></form>
+
+      <header class="modal-topo">
+        <span class="rot">Marco ${m.pdp_id} · ${esc(m.area || "sem área")}</span>
+        <h3 id="modal-titulo">${esc(m.nome)}</h3>
+        <p class="tags">
+          <span class="tag ${estado.cls}">${estado.txt}</span>
+          ${critico ? `<span class="tag risco">caminho crítico</span>` : ""}
+          ${m.processo ? `<span class="tag">${esc(m.processo)}</span>` : ""}
+          ${m.fase ? `<span class="tag">${esc(m.fase)}</span>` : ""}
+        </p>
+      </header>
+
+      <section>
+        <h4>No tempo</h4>
+        <div class="grade">
+          ${campo("Início", br(m.inicio), "quando a tarefa começa, segundo o PDP")}
+          ${campo("Fim", br(m.fim), "quando ela termina, segundo o PDP")}
+          ${campo("Duração", dias(m.duracao), "dias úteis de trabalho, como o PDP conta")}
+          ${campo("No calendário", dias(m.corridos), "dias corridos entre início e fim, fins de semana inclusos")}
+          ${campo("Avanço", m.progresso + "%", "quanto o PDP registra como feito")}
+          ${campo("Até a entrega", dias(m.ate_entrega), "dias úteis entre o fim deste marco e o último do projeto")}
         </div>
-        <button type="button" class="fechar" id="painel-fechar" aria-label="Fechar">&times;</button>
-      </div>
-      <div class="painel-numeros">
-        <div><span class="rot">Início</span><b>${br(m.inicio)}</b></div>
-        <div><span class="rot">Fim</span><b>${br(m.fim)}</b></div>
-        <div><span class="rot">Duração</span><b>${m.duracao || "—"} dias</b></div>
-        <div><span class="rot">Situação</span><b>${estado} · ${m.progresso}%</b></div>
-        <div class="${m.folga_total === 0 ? "alerta" : ""}">
-          <span class="rot">Folga total</span><b>${folga}</b></div>
-        <div class="${m.folga_livre === 0 ? "alerta" : ""}">
-          <span class="rot">Folga livre</span><b>${livre}</b></div>
-        <div><span class="rot">Custo</span><b>${m.custo ? real(m.custo) : "—"}</b>
-          <span class="nota">${m.custo ? (m.custo_proprio ? "item amarrado a este marco"
-                                                          : "média do setor") : "setor sem composição"}</span></div>
-        <div><span class="rot">Caminho crítico</span>
-          <b>${m.critico ? "sim, pelo PDP" : "não"}</b>
-          <span class="nota">${m.folga_total === 0 ? "folga zero confirma" : "tem folga"}</span></div>
-      </div>
-      ${m.deslocado ? `<p class="desloc">Neste cenário este marco está
-        <b>${m.deslocado} dias</b> depois do que o PDP publicou.</p>` : ""}
-      <div class="painel-elos">
+      </section>
+
+      <section>
+        <h4>Folga <span class="ajuda-h4">quanto dá para atrasar</span></h4>
+        <div class="grade">
+          ${campo("Folga total", m.folga_total === null ? "—" : dias(m.folga_total) + " úteis",
+            "o quanto este marco pode atrasar sem empurrar a entrega do projeto. Zero é caminho crítico.",
+            m.folga_total === 0 ? "alerta" : "")}
+          ${campo("Folga livre", m.folga_livre === null ? "—" : dias(m.folga_livre) + " úteis",
+            "o quanto pode atrasar sem empurrar nem o sucessor mais apertado. Nunca é maior que a total.",
+            m.folga_livre === 0 ? "alerta" : "")}
+          ${campo("Data limite", m.limite ? br(m.limite) : "—",
+            "o último dia em que pode terminar sem atrasar a entrega")}
+          ${campo("Arrasta", m.arrasta + " marco" + (m.arrasta === 1 ? "" : "s"),
+            "quantos marcos se movem se este escorregar — contando os que dependem dos que dependem dele",
+            m.arrasta > 20 ? "alerta" : "")}
+          ${campo("Caminho crítico", m.critico ? "sim, marcado pelo PDP" : "não",
+            m.critico === critico ? "a folga calculada aqui concorda"
+              : "a folga calculada aqui discorda — costuma ser feriado, que esta conta não conhece")}
+        </div>
+      </section>
+
+      <section>
+        <h4>Custo</h4>
+        <div class="grade">
+          ${campo("Valor nesta barra", m.custo ? real(m.custo) : "—",
+            m.custo ? (m.custo_proprio
+              ? "soma dos itens da composição amarrados a este marco — valor cheio, não média"
+              : "custo médio de um marco deste setor, informado no módulo do setor")
+            : "o setor que paga este trabalho ainda não tem composição")}
+          ${campo("Setor de custo", m.setor_nome ? esc(m.setor_nome) : "nenhum",
+            m.setor_nome ? "o setor do estudo que paga o trabalho desta área"
+              : "esta área não gera custo próprio: ou já está orçada em outro lugar, ou produz o preço dos outros")}
+          ${campo("Linha do resultado", m.linha_dre ? esc(m.linha_dre) : "—",
+            "onde este dinheiro aparece na tabela de viabilidade")}
+          ${campo("Quando desembolsa", m.desembolso === "marcos" ? "nos meses dos marcos"
+              : m.desembolso === "obra" ? "acompanhando a curva da obra"
+              : m.desembolso === "lancamento" ? "diluído até o lançamento"
+              : m.desembolso === "entrega" ? "concentrado no fim da obra"
+              : m.desembolso === "a_vista" ? "à vista, no primeiro mês" : "—",
+            "a regra que o motor usa para espalhar o custo deste setor no tempo")}
+        </div>
+      </section>
+
+      ${m.deslocado ? `<p class="desloc"><b>Neste cenário este marco está
+        ${m.deslocado} dias depois</b> do que o PDP publicou — é uma simulação de
+        atraso que virou cenário.</p>` : ""}
+
+      <section class="elos">
         <div>
           <h4>Depende de <span>${m.antes.length}</span></h4>
+          <p class="ajuda">O que precisa acontecer antes. Clique para abrir.</p>
           ${m.antes.length ? `<ul>${m.antes.map(v => elo(v, "antes")).join("")}</ul>`
-            : `<p class="vazio-elo">Nada precisa acontecer antes — este marco pode começar quando o projeto começa.</p>`}
+            : `<p class="vazio-elo">Nada. Este marco não espera ninguém.</p>`}
         </div>
         <div>
           <h4>Destrava <span>${m.depois.length}</span></h4>
+          <p class="ajuda">O que só pode andar depois dele.</p>
           ${m.depois.length ? `<ul>${m.depois.map(v => elo(v, "depois")).join("")}</ul>`
-            : `<p class="vazio-elo">Não destrava nada. Atrasar aqui não move mais ninguém — só a própria entrega.</p>`}
+            : `<p class="vazio-elo">Nada. Atrasar aqui não move mais ninguém — só a própria entrega.</p>`}
         </div>
-      </div>
-      <div class="painel-acoes">
-        <button type="button" class="simular-daqui" data-id="${m.pdp_id}">
+      </section>
+
+      <footer class="modal-rodape">
+        <button type="button" class="principal simular-daqui" data-id="${m.pdp_id}">
           Simular atraso neste marco</button>
-      </div>`;
+        <span class="legenda-tab">Folgas em dias úteis, calculadas sobre as datas
+          do PDP. Feriado não entra na conta.</span>
+      </footer>`;
+
+    if (!painel.open) painel.showModal();
     acender();
     const alvo = paneNomes.querySelector(`[data-id="${id}"]`);
     if (alvo) alvo.scrollIntoView({block: "nearest"});
@@ -478,26 +549,26 @@
     }
   }
 
-  function fechar() { painel.hidden = true; selecionado = null; acender(); }
-
-  [paneTempo, paneNomes].forEach(pane => pane.addEventListener("click", e => {
-    const g = e.target.closest("[data-id]");
-    if (!g) return;
-    if (g.dataset.id === selecionado) fechar(); else abrir(g.dataset.id);
-  }));
-
+  function fechar() { if (painel.open) painel.close(); selecionado = null; acender(); }
+  painel.addEventListener("close", () => { selecionado = null; acender(); });
   painel.addEventListener("click", e => {
-    if (e.target.closest("#painel-fechar")) return fechar();
+    if (e.target === painel) return fechar();      // clique no fundo
     const ir = e.target.closest("[data-ir]");
     if (ir) return abrir(ir.dataset.ir);
     const sim = e.target.closest(".simular-daqui");
     if (sim) {
+      fechar();
       document.getElementById("sim-marco").value = sim.dataset.id;
       document.getElementById("simulador").scrollIntoView({behavior: "smooth"});
       document.getElementById("sim-dias").focus();
     }
   });
-  document.addEventListener("keydown", e => { if (e.key === "Escape") fechar(); });
+
+  [paneTempo, paneNomes].forEach(pane => pane.addEventListener("click", e => {
+    const g = e.target.closest("[data-id]");
+    if (!g) return;
+    if (g.dataset.id === selecionado && painel.open) fechar(); else abrir(g.dataset.id);
+  }));
 
   // os dois painéis rolam juntos na vertical; o eixo acompanha na horizontal
   paneTempo.addEventListener("scroll", () => {
@@ -517,7 +588,6 @@
   resumoSetores();
   desenhar();
   if (hojeX > 0) paneTempo.scrollLeft = Math.max(0, hojeX - paneTempo.clientWidth / 2);
-  if (D.atual) abrir(D.atual.pdp_id);
 
   // ------------------------------------------------------------ simulação
   const saida = document.getElementById("sim-saida");
@@ -602,7 +672,7 @@
   .arquivo form{display:flex; gap:.6rem; align-items:center; flex-wrap:wrap}
   .arquivo input[type=file]{font-size:.8rem; max-width:230px}
 
-  .gantt-caixa{background:var(--cartao); border:1px solid var(--fio);
+  .gantt-caixa{background:var(--superficie); border:1px solid var(--fio);
     border-radius:12px; overflow:hidden}
   .gantt-cabeca{display:flex; justify-content:space-between; align-items:flex-start;
     gap:1.5rem; flex-wrap:wrap; padding:1.1rem 1.2rem .9rem;
@@ -622,7 +692,7 @@
   .legenda-gantt i.ac{background:var(--realizado)}
   /* ------------------------------------------------------------ filtros */
   .filtros{display:flex; gap:.7rem 1rem; align-items:center; flex-wrap:wrap;
-    padding:.8rem 1.2rem; border-bottom:1px solid var(--fio); background:var(--papel)}
+    padding:.8rem 1.2rem; border-bottom:1px solid var(--fio); background:var(--fundo)}
   .filtros .busca input{min-width:250px; font-size:.85rem}
   .filtros .mini{width:56px; text-align:center; font-size:.82rem}
   .marca-caixa{display:inline-flex; align-items:center; gap:.4rem; font-size:.82rem;
@@ -633,7 +703,7 @@
     padding:.35rem .8rem; border:1px solid var(--fio-forte); border-radius:8px;
     list-style:none; white-space:nowrap}
   .setores-filtro .lista{position:absolute; z-index:20; top:calc(100% + .4rem); left:0;
-    background:var(--cartao); border:1px solid var(--fio-forte); border-radius:10px;
+    background:var(--superficie); border:1px solid var(--fio-forte); border-radius:10px;
     padding:.7rem .9rem; display:flex; flex-direction:column; gap:.45rem;
     min-width:250px; box-shadow:0 10px 30px rgba(0,0,0,.18)}
   .acoes-mini{display:flex; gap:.4rem; margin-top:.3rem}
@@ -642,7 +712,7 @@
     font-variant-numeric:tabular-nums}
 
   /* -------------------------------------------------------------- o Gantt */
-  .gantt-eixo{overflow:hidden; padding-left:330px; background:var(--papel);
+  .gantt-eixo{overflow:hidden; padding-left:330px; background:var(--fundo);
     border-bottom:1px solid var(--fio)}
   .gantt-corpo{display:flex; align-items:flex-start}
   .gantt-nomes{width:330px; flex:none; max-height:560px; overflow-y:auto;
@@ -688,43 +758,65 @@
     stroke-dasharray:4 3}
   .gantt-eixo .hoje-txt{fill:var(--realizado); font-size:10.5px; letter-spacing:.1em}
 
-  /* ------------------------------------------------------- painel do marco */
-  .painel-marco{background:var(--cartao); border:1px solid var(--fio);
-    border-radius:12px; padding:1.2rem 1.4rem 1.4rem; margin-top:1rem}
-  .painel-topo{display:flex; justify-content:space-between; align-items:flex-start; gap:1rem}
-  .painel-topo .rot{font-size:.7rem; letter-spacing:.1em; text-transform:uppercase;
+  /* -------------------------------------------------------- modal do marco */
+  .modal-marco{border:none; border-radius:14px; padding:0; max-width:840px;
+    width:calc(100vw - 3rem); max-height:88vh; background:var(--superficie);
+    color:var(--tinta); box-shadow:0 24px 70px rgba(0,0,0,.35)}
+  .modal-marco::backdrop{background:rgba(0,0,0,.55); backdrop-filter:blur(2px)}
+  .modal-marco > *{padding:0 1.8rem}
+  .fecha-form{position:sticky; top:0; z-index:2; display:flex; justify-content:flex-end;
+    padding:.6rem 1rem 0 0; margin:0}
+  .modal-marco .fechar{border:none; background:none; font-size:1.7rem; line-height:1;
+    color:var(--tinta-3); cursor:pointer; padding:0 .4rem}
+  .modal-marco .fechar:hover{color:var(--tinta)}
+  .modal-topo{padding-bottom:.2rem}
+  .modal-topo .rot{font-size:.7rem; letter-spacing:.11em; text-transform:uppercase;
     color:var(--tinta-3)}
-  .painel-topo h3{margin:.25rem 0 0; font-size:1.15rem}
-  .painel-topo .fechar{border:none; background:none; font-size:1.5rem; line-height:1;
-    color:var(--tinta-3); cursor:pointer; padding:0 .3rem}
-  .painel-topo .fechar:hover{color:var(--tinta)}
-  .painel-numeros{display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr));
-    gap:.9rem 1.2rem; margin:1.1rem 0 .4rem; padding:.9rem 0;
-    border-top:1px solid var(--fio); border-bottom:1px solid var(--fio)}
-  .painel-numeros .rot{display:block; font-size:.66rem; letter-spacing:.1em;
-    text-transform:uppercase; color:var(--tinta-3); margin-bottom:.2rem}
-  .painel-numeros b{font-size:.95rem; font-variant-numeric:tabular-nums}
-  .painel-numeros .nota{display:block; font-size:.7rem; color:var(--tinta-3);
-    margin-top:.15rem}
-  .painel-numeros .alerta b{color:var(--realizado)}
-  .desloc{font-size:.82rem; color:var(--tinta-2); margin:.6rem 0 0}
-  .painel-elos{display:grid; grid-template-columns:1fr 1fr; gap:1.6rem; margin-top:1rem}
-  @media(max-width:820px){.painel-elos{grid-template-columns:1fr}}
-  .painel-elos h4{margin:0 0 .5rem; font-size:.8rem; letter-spacing:.08em;
-    text-transform:uppercase; color:var(--tinta-3); font-weight:600}
-  .painel-elos h4 span{color:var(--tinta); margin-left:.3rem}
-  .painel-elos ul{list-style:none; margin:0; padding:0; max-height:230px; overflow-y:auto}
+  .modal-topo h3{margin:.25rem 0 .6rem; font-size:1.35rem; line-height:1.2}
+  .modal-topo .tags{display:flex; gap:.4rem; flex-wrap:wrap; margin:0 0 .2rem}
+  .tag{font-size:.7rem; letter-spacing:.05em; padding:.15rem .55rem; border-radius:999px;
+    border:1px solid var(--fio-forte); color:var(--tinta-3)}
+  .tag.curso{border-color:var(--areia-funda); color:var(--areia-funda)}
+  .tag.feito{border-color:var(--fio-forte); color:var(--tinta-3)}
+  .tag.atrasado,.tag.risco{border-color:var(--realizado); color:var(--realizado)}
+  .modal-marco section{padding-top:1.1rem; padding-bottom:.2rem}
+  .modal-marco h4{margin:0 0 .7rem; font-size:.74rem; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--tinta-3); font-weight:600;
+    border-top:1px solid var(--fio); padding-top:1rem}
+  .modal-marco h4 span{color:var(--tinta); margin-left:.35rem}
+  .ajuda-h4{font-size:.68rem; letter-spacing:.02em; text-transform:none;
+    color:var(--tinta-3)!important; font-weight:400; margin-left:.5rem}
+  .grade{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:1rem 1.4rem}
+  .grade .rot{display:block; font-size:.66rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--tinta-3); margin-bottom:.15rem}
+  .grade b{display:block; font-size:1rem; font-variant-numeric:tabular-nums;
+    line-height:1.25}
+  .grade .nota{display:block; font-size:.72rem; color:var(--tinta-3);
+    margin-top:.2rem; line-height:1.4}
+  .grade .alerta b{color:var(--realizado)}
+  .desloc{font-size:.84rem; color:var(--tinta-2); margin:1rem 0 0}
+  .elos{display:grid; grid-template-columns:1fr 1fr; gap:0 1.8rem}
+  @media(max-width:760px){.elos{grid-template-columns:1fr}}
+  .elos .ajuda{font-size:.72rem; color:var(--tinta-3); margin:-.4rem 0 .5rem}
+  .elos ul{list-style:none; margin:0; padding:0; max-height:260px; overflow-y:auto}
   .pula{display:block; width:100%; text-align:left; background:none; border:none;
-    border-bottom:1px solid var(--fio); padding:.45rem .2rem; cursor:pointer}
+    border-bottom:1px solid var(--fio); padding:.5rem .2rem; cursor:pointer}
   .pula:hover{background:var(--fio)}
   .pula:disabled{cursor:default; opacity:.55}
   .pula .cod{font-size:.72rem; color:var(--tinta-3); font-variant-numeric:tabular-nums;
     margin-right:.5rem}
-  .pula .txt{font-size:.86rem; color:var(--tinta)}
-  .pula .meta{display:block; font-size:.7rem; color:var(--tinta-3); margin-top:.1rem}
+  .pula .txt{font-size:.88rem; color:var(--tinta)}
+  .pula .meta{display:block; font-size:.71rem; color:var(--tinta-3); margin-top:.15rem}
+  .pula .meta b{color:var(--tinta-2); font-weight:600}
   .vazio-elo{font-size:.8rem; color:var(--tinta-3); margin:0}
-  .painel-acoes{margin-top:1.1rem}
-  .simular-daqui{font-size:.82rem}
+  .modal-rodape{display:flex; align-items:center; gap:1rem; flex-wrap:wrap;
+    padding-top:1.2rem; padding-bottom:1.6rem; margin-top:1rem;
+    border-top:1px solid var(--fio); position:sticky; bottom:0;
+    background:var(--superficie)}
+  .modal-rodape .legenda-tab{margin:0}
+  .cp{font-size:.62rem; letter-spacing:.06em; border:1px solid var(--realizado);
+    color:var(--realizado); border-radius:3px; padding:0 .28rem; margin-left:.35rem}
 
   .desembolso{display:flex; align-items:flex-end; gap:3px; min-width:100%;
     height:200px; padding:1.2rem 1rem .2rem}
@@ -739,7 +831,7 @@
   .periodo .rot{font-size:8.5px; color:var(--tinta-3); margin-top:4px;
     writing-mode:vertical-rl; white-space:nowrap}
 
-  .simulador{background:var(--cartao); border:1px solid var(--fio);
+  .simulador{background:var(--superficie); border:1px solid var(--fio);
     border-radius:12px; padding:1.2rem 1.3rem}
   .simulador tr.informado td{font-weight:600}
   td.mono{font-variant-numeric:tabular-nums; font-size:.82rem; color:var(--tinta-2)}
@@ -747,7 +839,7 @@
   .cp{font-size:.6rem; letter-spacing:.09em; border:1px solid var(--realizado);
     color:var(--realizado); border-radius:3px; padding:0 .22rem; margin-left:.35rem}
   .diverge{color:var(--realizado); font-weight:600}
-  .vazio{background:var(--cartao); border:1px solid var(--fio); border-radius:12px;
+  .vazio{background:var(--superficie); border:1px solid var(--fio); border-radius:12px;
     padding:2rem; text-align:center}
   .vazio .sub{max-width:56ch; margin:.6rem auto 0}
 </style>

@@ -532,3 +532,24 @@ def test_a_folga_concorda_com_o_caminho_critico_do_pdp(s, emp):
     assert not d["divergentes"], (
         f"o PDP marca {d['criticos_pdp']} marcos como críticos e a folga aponta "
         f"{d['criticos_folga']}; divergem: {d['divergentes'][:10]}")
+
+
+def test_arrasto_conta_os_descendentes_e_nao_so_os_vizinhos():
+    """
+    "Destrava dois" e "move quarenta e oito" são perguntas diferentes, e é a
+    segunda que se faz antes de aceitar um atraso.
+    """
+    from app.cronograma import arrasto
+    marcos = [{"pdp_id": x} for x in "ABCDE"]
+    deps = {"B": [("A", "TI", 0)], "C": [("B", "TI", 0)],
+            "D": [("B", "TI", 0)], "E": [("D", "TI", 0)]}
+    a = arrasto(marcos, deps)
+    assert a["A"] == 4 and a["B"] == 3 and a["D"] == 1 and a["E"] == 0
+
+
+def test_arrasto_nao_entra_em_laco_infinito_com_ciclo():
+    from app.cronograma import arrasto
+    marcos = [{"pdp_id": x} for x in "ABC"]
+    deps = {"A": [("B", "TI", 0)], "B": [("A", "TI", 0)], "C": [("A", "TI", 0)]}
+    a = arrasto(marcos, deps)
+    assert a["C"] == 0 and a["A"] >= 1

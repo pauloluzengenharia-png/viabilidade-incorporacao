@@ -420,6 +420,9 @@ def dados_do_gantt(s: Session, emp_id: int, cenario_id: int) -> dict:
             "id": l["id"], "pdp_id": l["pdp_id"], "nome": l["nome"],
             "area": l["area_nome"], "area_codigo": l["area_codigo"],
             "setor": l["setor"], "setor_nome": setor["nome"] if setor else None,
+            "linha_dre": setor["linha_dre"] if setor else None,
+            "desembolso": setor["desembolso"] if setor else None,
+            "processo": l["processo"], "fase": l["fase"],
             "inicio": inicio, "fim": fim, "duracao": l["duracao"],
             "progresso": l["progresso"], "critico": l["critico"],
             "deslocado": d,
@@ -445,12 +448,27 @@ def dados_do_gantt(s: Session, emp_id: int, cenario_id: int) -> dict:
     deps = dependencias_do_empreendimento(s, emp_id)
     fol = folgas(marcos, deps)
     viz = vizinhos(marcos, deps)
+    arr = arrasto(marcos, deps)
+    primeiro = min((m["inicio"] for m in marcos if m["inicio"]), default=None)
+    ultimo = max((m["fim"] for m in marcos if m["fim"]), default=None)
     for m in marcos:
         f = fol.get(m["pdp_id"])
         m["folga_total"] = f["total"] if f else None
         m["folga_livre"] = f["livre"] if f else None
+        m["limite"] = f["limite"] if f else None
         m["antes"] = viz.get(m["pdp_id"], {}).get("antes", [])
         m["depois"] = viz.get(m["pdp_id"], {}).get("depois", [])
+        m["arrasta"] = arr.get(m["pdp_id"], 0)
+        m["corridos"] = ((m["fim"] - m["inicio"]).days + 1
+                         if m["inicio"] and m["fim"] else None)
+        m["uteis"] = (dias_uteis(m["inicio"], m["fim"]) + 1
+                      if m["inicio"] and m["fim"] else None)
+        m["desde_inicio"] = (dias_uteis(primeiro, m["inicio"])
+                             if primeiro and m["inicio"] else None)
+        m["ate_entrega"] = (dias_uteis(m["fim"], ultimo)
+                            if ultimo and m["fim"] else None)
+        # atrasado é o que já devia ter terminado e não terminou
+        m["atrasado"] = bool(m["fim"] and m["fim"] < hoje and m["progresso"] < 100)
 
     # o caminho crítico que a folga aponta e o que o PDP marcou podem discordar:
     # dias corridos aqui, dias úteis lá. Mostrar a divergência é mais útil do
@@ -465,6 +483,8 @@ def dados_do_gantt(s: Session, emp_id: int, cenario_id: int) -> dict:
         "hoje": hoje,
         "atual": _marco_de_hoje(marcos, hoje),
         "ajustes": ajuste,
+        "primeiro": primeiro,
+        "ultimo": ultimo,
         "criticos_pdp": len(pelo_pdp),
         "criticos_folga": len(pela_folga),
         "divergentes": sorted(pela_folga ^ pelo_pdp),
@@ -782,3 +802,38 @@ def vizinhos(marcos: list[dict], dependencias: dict[str, list]) -> dict[str, dic
                     {"pdp_id": alvo, "nome": nomes.get(alvo, ""), "tipo": tipo,
                      "lag": lag})
     return saida
+
+
+def arrasto(marcos: list[dict], dependencias: dict[str, list]) -> dict[str, int]:
+    """
+    Quantos marcos cada um arrasta se atrasar — todos os descendentes, não só
+    os sucessores diretos.
+
+    É a diferença entre "este marco destrava dois" e "este marco, se escorregar,
+    move quarenta e oito". A segunda é a pergunta que se faz antes de aceitar um
+    atraso, e a lista de sucessores diretos não responde.
+    """
+    sucessores: dict[str, list] = {}
+    ids = {str(m["pdp_id"]) for m in marcos}
+    for alvo, lista in dependencias.items():
+        if alvo not in ids:
+            continue
+        for pred, _t, _l in lista:
+            if pred in ids:
+                sucessores.setdefault(pred, []).append(alvo)
+
+    memo: dict[str, set] = {}
+
+    def desce(no: str, caminho: frozenset = frozenset()) -> set:
+        if no in memo:
+            return memo[no]
+        if no in caminho:                       # ciclo de cadastro: para aqui
+            return set()
+        acc = set()
+        for s in sucessores.get(no, []):
+            acc.add(s)
+            acc |= desce(s, caminho | {no})
+        memo[no] = acc
+        return acc
+
+    return {i: len(desce(i)) for i in ids}
