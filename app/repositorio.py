@@ -223,15 +223,27 @@ def pesos_por_setor(s: Session, emp_id: int, cenario_id: int) -> dict[str, dict]
     Setor sem marco não entra no resultado — e aí o motor mantém a regra antiga
     do setor, que é o comportamento correto quando não há cronograma.
     """
-    itens = q(s, """SELECT ci.setor, ci.valor, m.fim
+    itens = q(s, """SELECT ci.setor, ci.valor, ci.marco_id, m.fim
                       FROM composicao_item ci
                       LEFT JOIN marco m ON m.id = ci.marco_id
                      WHERE ci.cenario_id = :c""", c=cenario_id)
-    marcos = q(s, """SELECT a.setor, m.fim
+    marcos = q(s, """SELECT a.setor, m.id, m.fim
                        FROM marco m
                        JOIN area_pdp a ON a.codigo = m.area_codigo
                       WHERE m.empreendimento_id = :e AND a.setor IS NOT NULL
                         AND m.fim IS NOT NULL""", e=emp_id)
+
+    # o cenário pode carregar um cronograma deslocado — é o que uma simulação
+    # de atraso vira quando alguém a salva
+    ajuste = {l["marco_id"]: int(l["dias"]) for l in
+              q(s, """SELECT marco_id, dias FROM cenario_marco_ajuste
+                       WHERE cenario_id = :c""", c=cenario_id)}
+    if ajuste:
+        from datetime import timedelta
+        for l in marcos:
+            d = ajuste.get(l["id"])
+            if d:
+                l["fim"] = l["fim"] + timedelta(days=d)
 
     meses_do_setor: dict[str, list] = {}
     for l in marcos:
@@ -242,7 +254,9 @@ def pesos_por_setor(s: Session, emp_id: int, cenario_id: int) -> dict[str, dict]
     for i in itens:
         setor, valor = i["setor"], float(i["valor"])
         if i["fim"]:
-            mes = fim_mes(i["fim"])
+            from datetime import timedelta
+            desloca = ajuste.get(i["marco_id"], 0) if ajuste else 0
+            mes = fim_mes(i["fim"] + timedelta(days=desloca) if desloca else i["fim"])
             datado.setdefault(setor, {})[mes] = datado.setdefault(setor, {}).get(mes, 0.0) + valor
         else:
             solto[setor] = solto.get(setor, 0.0) + valor

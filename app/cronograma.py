@@ -265,3 +265,373 @@ def resumo_do_setor(s: Session, emp_id: int, cenario_id: int, setor: str) -> dic
                   FROM composicao_item WHERE cenario_id = :c AND setor = :s""",
           c=cenario_id, s=setor)[0]
     return {**dict(j), **dict(i)}
+
+
+# =====================================================================
+# simulação: o atraso que anda pela rede
+# =====================================================================
+def propagar(marcos: list[dict], dependencias: dict[str, list],
+             atrasos: dict[str, int]) -> dict[str, int]:
+    """
+    Dado um atraso em alguns marcos, quanto cada um dos outros anda.
+
+    O estudo não recalcula cronograma — quem faz isso é o PDP. O que se faz
+    aqui é mais modesto e é o que a pergunta pede: *se este marco escorregar
+    tantos dias, quando passam a acontecer os que dependem dele?*
+
+    A regra é a do caminho: um sucessor anda o máximo do que os seus
+    predecessores andaram, e nunca menos que zero — adiantar um marco não puxa
+    o resto para trás, porque quem vem depois tem os seus próprios motivos para
+    começar quando começa. Por isso o resultado é sempre um deslocamento para a
+    frente, e por isso ele é conservador de propósito.
+
+    O tipo da ligação (TI, II, TT, IT) e a defasagem não mudam o quanto anda —
+    mudam de qual ponta do predecessor a data do sucessor é medida, e essa conta
+    é do PDP. Aqui interessa a propagação do atraso, que é a mesma para os
+    quatro tipos.
+
+    Devolve só quem se move, incluindo os marcos informados.
+    """
+    ordem = _ordem_topologica(marcos, dependencias)
+    andou = {k: int(v) for k, v in atrasos.items() if int(v) > 0}
+    for pdp_id in ordem:
+        de_tras = [andou.get(pred, 0) for pred, _t, _l in dependencias.get(pdp_id, [])]
+        herdado = max(de_tras, default=0)
+        if herdado > andou.get(pdp_id, 0):
+            andou[pdp_id] = herdado
+    return {k: v for k, v in andou.items() if v > 0}
+
+
+def _ordem_topologica(marcos: list[dict], dependencias: dict[str, list]) -> list[str]:
+    """
+    Os marcos numa ordem em que todo predecessor vem antes do seu sucessor.
+
+    Se houver ciclo — e cronograma de obra tem, por engano de cadastro —, os
+    marcos que sobram entram no fim pela data de início. Ciclo não pode travar
+    a simulação inteira: o que ele faz é impedir a propagação naquele pedaço, e
+    isso é melhor do que uma tela em branco.
+    """
+    ids = {str(m["pdp_id"]) for m in marcos}
+    pendentes = {i: {p for p, _t, _l in dependencias.get(i, []) if p in ids} for i in ids}
+    ordem, prontos = [], sorted(i for i, ps in pendentes.items() if not ps)
+    vistos = set(prontos)
+    while prontos:
+        atual = prontos.pop(0)
+        ordem.append(atual)
+        for i, ps in pendentes.items():
+            if atual in ps:
+                ps.discard(atual)
+                if not ps and i not in vistos:
+                    vistos.add(i)
+                    prontos.append(i)
+        prontos.sort()
+    resto = [i for i in ids if i not in vistos]
+    if resto:
+        por_data = {str(m["pdp_id"]): (m.get("inicio") or date.max) for m in marcos}
+        ordem.extend(sorted(resto, key=lambda i: por_data.get(i, date.max)))
+    return ordem
+
+
+def dependencias_do_empreendimento(s: Session, emp_id: int) -> dict[str, list]:
+    """{pdp_id do sucessor: [(pdp_id do predecessor, tipo, defasagem)]}"""
+    linhas = q(s, """SELECT m.pdp_id, d.predecessor, d.tipo, d.defasagem
+                       FROM marco_dependencia d
+                       JOIN marco m ON m.id = d.marco_id
+                      WHERE m.empreendimento_id = :e""", e=emp_id)
+    saida: dict[str, list] = {}
+    for l in linhas:
+        saida.setdefault(l["pdp_id"], []).append(
+            (l["predecessor"], l["tipo"], int(l["defasagem"] or 0)))
+    return saida
+
+
+def ajustes_do_cenario(s: Session, cenario_id: int) -> dict[int, int]:
+    """{marco_id: dias} — o cronograma deslocado deste cenário."""
+    return {l["marco_id"]: int(l["dias"]) for l in
+            q(s, "SELECT marco_id, dias FROM cenario_marco_ajuste WHERE cenario_id = :c",
+              c=cenario_id)}
+
+
+# =====================================================================
+# o que o Gantt precisa saber
+# =====================================================================
+def _fatia(marcos_da_area: int, setor: dict, total_composicao: float) -> float:
+    """
+    O custo que cada barra do Gantt carrega.
+
+    Primeiro o que a casa informou: `custo_medio_marco` do setor. É um número
+    de gente, não do sistema — uma taxa de cartório não custa o mesmo que um
+    registro de incorporação, e nenhuma divisão automática sabe disso.
+
+    Quando o setor ainda não informou, cai no rateio igual da composição, que é
+    a mesma conta que o motor usa para distribuir o desembolso. A tela diz qual
+    das duas está valendo.
+    """
+    if setor.get("custo_medio_marco") is not None:
+        return float(setor["custo_medio_marco"])
+    return (total_composicao / marcos_da_area) if marcos_da_area else 0.0
+
+
+def dados_do_gantt(s: Session, emp_id: int, cenario_id: int) -> dict:
+    """
+    Tudo que a tela desenha, já resolvido do lado do servidor.
+
+    Devolve os marcos com data, custo e área; os setores com o confronto entre
+    a média informada e o total da composição; as ligações de precedência; e o
+    marco de hoje. A tela não faz conta de dinheiro — ela desenha.
+    """
+    import datetime as dt
+
+    hoje = dt.date.today()
+    ajuste = ajustes_do_cenario(s, cenario_id)
+
+    setores = {l["codigo"]: dict(l) for l in
+               q(s, "SELECT * FROM setor_custo ORDER BY ordem")}
+    totais = {l["setor"]: float(l["total"]) for l in
+              q(s, """SELECT setor, sum(valor) AS total FROM composicao_item
+                       WHERE cenario_id = :c GROUP BY setor""", c=cenario_id)}
+    amarrados = {l["marco_id"]: float(l["total"]) for l in
+                 q(s, """SELECT marco_id, sum(valor) AS total FROM composicao_item
+                          WHERE cenario_id = :c AND marco_id IS NOT NULL
+                          GROUP BY marco_id""", c=cenario_id)}
+
+    linhas = q(s, """SELECT m.*, a.nome AS area_nome, a.setor, a.ordem AS area_ordem
+                       FROM marco m
+                       LEFT JOIN area_pdp a ON a.codigo = m.area_codigo
+                      WHERE m.empreendimento_id = :e
+                      ORDER BY a.ordem NULLS LAST, m.inicio, m.fim, m.pdp_id""",
+                 e=emp_id)
+    por_area = {}
+    for l in linhas:
+        por_area.setdefault(l["area_codigo"], []).append(l)
+
+    marcos = []
+    for l in linhas:
+        d = ajuste.get(l["id"], 0)
+        inicio = l["inicio"] + dt.timedelta(days=d) if l["inicio"] and d else l["inicio"]
+        fim = l["fim"] + dt.timedelta(days=d) if l["fim"] and d else l["fim"]
+        setor = setores.get(l["setor"]) if l["setor"] else None
+        n_area = len(por_area.get(l["area_codigo"], []))
+        custo = amarrados.get(l["id"])
+        proprio = custo is not None
+        if custo is None and setor:
+            custo = _fatia(n_area, setor, totais.get(l["setor"], 0.0))
+        marcos.append({
+            "id": l["id"], "pdp_id": l["pdp_id"], "nome": l["nome"],
+            "area": l["area_nome"], "area_codigo": l["area_codigo"],
+            "setor": l["setor"], "setor_nome": setor["nome"] if setor else None,
+            "inicio": inicio, "fim": fim, "duracao": l["duracao"],
+            "progresso": l["progresso"], "critico": l["critico"],
+            "deslocado": d,
+            "custo": round(custo or 0.0, 2), "custo_proprio": proprio,
+            "em_curso": bool(inicio and fim and inicio <= hoje <= fim),
+            "concluido": bool(fim and fim < hoje) or l["progresso"] >= 100,
+        })
+
+    # o confronto que a tela mostra: a média informada bate com a composição?
+    resumo_setores = []
+    for cod, st in setores.items():
+        n = sum(1 for m in marcos if m["setor"] == cod)
+        if not n and not totais.get(cod):
+            continue
+        media = st.get("custo_medio_marco")
+        resumo_setores.append({
+            "codigo": cod, "nome": st["nome"], "marcos": n,
+            "media": float(media) if media is not None else None,
+            "composicao": totais.get(cod, 0.0),
+            "pela_media": float(media) * n if media is not None else None,
+        })
+
+    return {
+        "marcos": marcos,
+        "setores": resumo_setores,
+        "dependencias": dependencias_do_empreendimento(s, emp_id),
+        "hoje": hoje,
+        "atual": _marco_de_hoje(marcos, hoje),
+        "ajustes": ajuste,
+    }
+
+
+def _marco_de_hoje(marcos: list[dict], hoje) -> Optional[dict]:
+    """
+    Onde o projeto está agora.
+
+    Preferência para o que está em curso e mais perto de terminar — é o que a
+    obra chama de "frente atual". Sem nenhum em curso, o próximo a começar; e
+    se tudo já passou, o último que terminou.
+    """
+    em_curso = [m for m in marcos if m["em_curso"]]
+    if em_curso:
+        return min(em_curso, key=lambda m: (m["fim"], not m["critico"]))
+    futuros = [m for m in marcos if m["inicio"] and m["inicio"] > hoje]
+    if futuros:
+        return min(futuros, key=lambda m: m["inicio"])
+    passados = [m for m in marcos if m["fim"]]
+    return max(passados, key=lambda m: m["fim"]) if passados else None
+
+
+def desembolso_por_periodo(s: Session, emp_id: int, cenario_id: int,
+                           passo: str = "mes") -> list[dict]:
+    """
+    Quanto sai de caixa em cada período, e de quais setores.
+
+    Vem dos mesmos pesos que o motor usa — não é uma segunda conta paralela.
+    Se esta tela e o fluxo de caixa discordassem, uma das duas estaria mentindo.
+    """
+    from .repositorio import pesos_por_setor
+    import datetime as dt
+
+    pesos = pesos_por_setor(s, emp_id, cenario_id)
+    totais = {l["setor"]: float(l["total"]) for l in
+              q(s, """SELECT setor, sum(valor) AS total FROM composicao_item
+                       WHERE cenario_id = :c GROUP BY setor""", c=cenario_id)}
+    nomes = {l["codigo"]: l["nome"] for l in q(s, "SELECT codigo, nome FROM setor_custo")}
+
+    def rotulo(m: dt.date) -> tuple:
+        if passo == "ano":
+            return (dt.date(m.year, 12, 31), str(m.year))
+        if passo == "trimestre":
+            t = (m.month - 1) // 3 + 1
+            fim = dt.date(m.year, t * 3, 1)
+            return (fim, f"{t}º tri {m.year}")
+        return (m, f"{m.month:02d}/{m.year}")
+
+    balde: dict = {}
+    for setor, meses in pesos.items():
+        total = totais.get(setor, 0.0)
+        for mes, w in meses.items():
+            chave, texto = rotulo(mes)
+            b = balde.setdefault(chave, {"quando": chave, "rotulo": texto,
+                                         "total": 0.0, "setores": {}})
+            v = total * w
+            b["total"] += v
+            b["setores"][setor] = b["setores"].get(setor, 0.0) + v
+
+    saida = []
+    for chave in sorted(balde):
+        b = balde[chave]
+        b["setores"] = sorted(
+            ({"setor": k, "nome": nomes.get(k, k), "valor": round(v, 2)}
+             for k, v in b["setores"].items() if v > 0.005),
+            key=lambda x: -x["valor"])
+        b["total"] = round(b["total"], 2)
+        saida.append(b)
+    return saida
+
+
+# =====================================================================
+# a simulação virando cenário
+# =====================================================================
+def simular(s: Session, emp_id: int, cenario_id: int,
+            atrasos: dict[str, int]) -> dict:
+    """
+    O efeito de um atraso, sem gravar nada: quem anda e quanto.
+
+    Devolve as datas novas e o total deslocado, para a tela mostrar antes de
+    alguém decidir se aquilo vira cenário.
+    """
+    import datetime as dt
+
+    marcos = q(s, """SELECT id, pdp_id, nome, inicio, fim, critico
+                       FROM marco WHERE empreendimento_id = :e""", e=emp_id)
+    deps = dependencias_do_empreendimento(s, emp_id)
+    base = ajustes_do_cenario(s, cenario_id)
+    por_pdp = {m["pdp_id"]: m for m in marcos}
+
+    partida = {m["pdp_id"]: base.get(m["id"], 0) for m in marcos}
+    partida.update({k: int(v) for k, v in atrasos.items() if k in por_pdp})
+
+    movidos = propagar(marcos, deps, partida)
+    informados = {k for k, v in atrasos.items() if int(v) > 0}
+
+    detalhe = []
+    for pdp_id, dias in sorted(movidos.items(), key=lambda kv: -kv[1]):
+        m = por_pdp.get(pdp_id)
+        if not m or not m["fim"]:
+            continue
+        detalhe.append({
+            "pdp_id": pdp_id, "nome": m["nome"], "critico": m["critico"],
+            "dias": dias, "informado": pdp_id in informados,
+            "fim_antes": m["fim"],
+            "fim_depois": m["fim"] + dt.timedelta(days=dias),
+        })
+    return {
+        "movidos": detalhe,
+        "quantos": len(detalhe),
+        "informados": len(informados),
+        "arrastados": len(detalhe) - len(informados),
+        "fim_antes": max((m["fim"] for m in marcos if m["fim"]), default=None),
+        "fim_depois": max((d["fim_depois"] for d in detalhe),
+                          default=max((m["fim"] for m in marcos if m["fim"]), default=None)),
+    }
+
+
+def salvar_como_cenario(s: Session, emp_id: int, base_id: int, nome: str,
+                        atrasos: dict[str, int], autor: str) -> int:
+    """
+    Congela a simulação num cenário próprio, copiado do que a originou.
+
+    Um cenário é a mesma conta com outras premissas. Aqui a premissa que muda é
+    o calendário: mesmo preço, mesmo custo, mesma obra — outra data. Por isso a
+    cópia leva tudo do cenário de origem e só acrescenta os deslocamentos.
+    """
+    base = q(s, "SELECT * FROM cenario WHERE id = :c", c=base_id)[0]
+    novo = q(s, """
+        INSERT INTO cenario (empreendimento_id, nome, tipo, mes_base,
+                             horizonte_meses, principal,
+                             indice_ate_chaves, indice_apos_chaves)
+        VALUES (:e, :n, 'projecao', :mb, :h, false, :i1, :i2)
+        RETURNING id""",
+        e=emp_id, n=nome.strip()[:60] or "simulação de atraso",
+        mb=base["mes_base"], h=base["horizonte_meses"],
+        i1=base["indice_ate_chaves"], i2=base["indice_apos_chaves"])[0]["id"]
+
+    for tabela, colunas in (
+            ("premissa", "chave, valor, unidade, origem"),
+            ("preco_cenario", "tipo_venda, preco_m2, preco_unidade, usar_tabela"),
+            ("plano_venda", "mes, quantidade, tipo_venda"),
+            ("premissa_terreno", "ordem, valor, vencimento"),
+            ("composicao_item", "setor, ordem, descricao, quantidade, unidade, "
+                                "valor_unitario, valor, observacao, marco_id")):
+        q(s, f"""INSERT INTO {tabela} (cenario_id, {colunas})
+                 SELECT :novo, {colunas} FROM {tabela} WHERE cenario_id = :base""",
+          novo=novo, base=base_id)
+
+    movidos = simular(s, emp_id, base_id, atrasos)["movidos"]
+    informados = {k for k, v in atrasos.items() if int(v) > 0}
+    ids = {m["pdp_id"]: m["id"] for m in
+           q(s, "SELECT id, pdp_id FROM marco WHERE empreendimento_id = :e", e=emp_id)}
+    for d in movidos:
+        q(s, """INSERT INTO cenario_marco_ajuste (cenario_id, marco_id, dias, origem)
+                VALUES (:c, :m, :d, :o)""",
+          c=novo, m=ids[d["pdp_id"]], d=d["dias"],
+          o="simulacao" if d["pdp_id"] in informados else "propagacao")
+
+    q(s, """INSERT INTO alteracao (empreendimento_id, cenario_id, modulo, entidade,
+                                   campo, valor_anterior, valor_novo, autor)
+            VALUES (:e, :c, 'cronograma', 'cenário', 'criado a partir de simulação',
+                    NULL, :v, :a)""",
+      e=emp_id, c=novo, a=autor,
+      v=f"{nome} — {len(informados)} marco(s) atrasado(s), "
+        f"{len(movidos) - len(informados)} arrastado(s) pela rede")
+    return novo
+
+
+def para_json(dados: dict) -> str:
+    """
+    O mesmo pacote de dados, pronto para o desenho no navegador.
+
+    Serializa datas em ISO e escapa `</` — o JSON vai dentro de uma tag
+    `<script>`, e um nome de marco que contivesse `</script>` fecharia a tag e
+    quebraria a página. Nomes vêm do PDP, então não são texto confiável.
+    """
+    import datetime as dt
+    import json
+
+    def conv(o):
+        if isinstance(o, (dt.date, dt.datetime)):
+            return o.isoformat()
+        raise TypeError(type(o))
+
+    bruto = json.dumps(dados, default=conv, ensure_ascii=False)
+    return bruto.replace("</", "<\\/").replace("<!--", "<\\!--")

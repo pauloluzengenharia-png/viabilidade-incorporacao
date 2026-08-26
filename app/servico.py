@@ -30,9 +30,12 @@ def _hash(e: EntradasCenario) -> str:
             return o.value
         return str(o)
 
-    # a série de índices sai daqui porque tem data como CHAVE de dicionário, e
-    # json.dumps não aceita isso; ela entra logo abaixo, já serializada
-    premissas = {k: v for k, v in asdict(e.premissas).items() if k != "serie_indice"}
+    # a série de índices e os pesos do cronograma saem daqui porque têm data
+    # como CHAVE de dicionário, e json.dumps não aceita isso; entram logo
+    # abaixo, já serializados. Ficar de fora do hash seria pior do que o erro:
+    # dois cenários com cronogramas diferentes compartilhariam a mesma rodada.
+    premissas = {k: v for k, v in asdict(e.premissas).items()
+                 if k not in ("serie_indice", "pesos_setor")}
 
     bruto = json.dumps({
         "premissas": premissas,
@@ -45,6 +48,10 @@ def _hash(e: EntradasCenario) -> str:
                                 for a in e.obra.atividades]},
         "plano": [asdict(p) for p in e.plano],
         "receb": {k.isoformat(): v for k, v in sorted(e.receb_vendidos.items())},
+        "cronograma": {setor: {m.isoformat(): round(w, 8)
+                               for m, w in sorted(pesos.items())}
+                       for setor, pesos in sorted(
+                           (e.premissas.pesos_setor or {}).items())},
         "correcao": {
             "ate_chaves": e.premissas.indice_ate_chaves,
             "apos_chaves": e.premissas.indice_apos_chaves,

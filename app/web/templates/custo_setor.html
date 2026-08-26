@@ -112,6 +112,22 @@
         'entrega': 'concentrado no fim da obra'}[setor.desembolso] }}.
   </p>
 
+  <div class="campo" style="max-width:300px; margin-top:1.4rem">
+    <span class="rot">Custo médio de um marco deste setor</span>
+    <span class="com-adorno tem-adorno">
+      <span class="adorno" aria-hidden="true">R$</span>
+      <input type="text" inputmode="decimal" autocomplete="off" name="custo_medio_marco"
+             data-formato="moeda"
+             value="{{ setor.custo_medio_marco|dinheiro if setor.custo_medio_marco is not none else '' }}"></span>
+    <span class="dica">É o valor que cada barra do Gantt carrega. Deixe vazio
+      para o sistema ratear o total da composição igualmente entre os marcos.
+      {% if janela and janela.marcos and setor.custo_medio_marco %}
+        Aqui: {{ janela.marcos }} marcos × R$ {{ setor.custo_medio_marco|dinheiro }}
+        = <b>R$ {{ (setor.custo_medio_marco|float * janela.marcos)|dinheiro }}</b>,
+        contra R$ {{ total|dinheiro }} de composição.
+      {% endif %}</span>
+  </div>
+
   <div class="acoes" style="margin-top:1.4rem">
     <button type="button" id="mais-um">Adicionar item</button>
     <button class="principal" type="submit" {{ 'disabled' if congelado }}>Salvar composição</button>

@@ -317,13 +317,63 @@ def tela_historico(emp_id: int, request: Request, s: Session = Depends(sessao)):
 
 # ---------------------------------------------------------- cronograma
 @app.get("/empreendimento/{emp_id}/dados/cronograma", response_class=HTMLResponse)
-def tela_cronograma(emp_id: int, request: Request, s: Session = Depends(sessao)):
-    """O cronograma do PDP visto pelo estudo: cada área e o setor que ela paga."""
+def tela_cronograma(emp_id: int, request: Request, cenario: Optional[int] = None,
+                    passo: str = "mes", s: Session = Depends(sessao)):
+    """
+    O cronograma como Gantt: barra por marco, custo em cada uma, desembolso por
+    período embaixo e a linha de hoje atravessando tudo.
+    """
     ctx = _contexto_dados(s, emp_id, "cronograma")
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    passo = passo if passo in ("mes", "trimestre", "ano") else "mes"
+    dados = cronograma.dados_do_gantt(s, emp_id, cen["id"])
     ctx.update(areas=cronograma.por_area(s, emp_id),
                ultima=cronograma.ultima_sincronizacao(s, emp_id),
-               configurado=PDP.configurado())
+               configurado=PDP.configurado(),
+               cenarios=_cenarios(s, emp_id), cenario=cen, passo=passo,
+               gantt=dados, gantt_json=cronograma.para_json(dados),
+               desembolso=cronograma.desembolso_por_periodo(s, emp_id, cen["id"], passo))
     return templates.TemplateResponse(request, "cronograma.html", ctx)
+
+
+@app.post("/empreendimento/{emp_id}/dados/cronograma/simular")
+async def simular_cronograma(emp_id: int, request: Request,
+                             cenario: Optional[int] = None,
+                             s: Session = Depends(sessao)):
+    """Quanto anda cada marco se este atrasar. Não grava — só responde."""
+    corpo = await request.json()
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    atrasos = {str(k): int(v) for k, v in (corpo.get("atrasos") or {}).items()
+               if str(v).lstrip("-").isdigit()}
+    if not atrasos:
+        return {"movidos": [], "quantos": 0, "informados": 0, "arrastados": 0}
+    return cronograma.simular(s, emp_id, cen["id"], atrasos)
+
+
+@app.post("/empreendimento/{emp_id}/dados/cronograma/cenario")
+async def cenario_da_simulacao(emp_id: int, request: Request,
+                               cenario: Optional[int] = None,
+                               s: Session = Depends(sessao),
+                               autor: str = Depends(usuario_atual)):
+    """Congela a simulação num cenário próprio e roda o motor nele."""
+    f = await request.form()
+    cen = _cenario_escolhido(s, emp_id, cenario)
+    atrasos = {}
+    for par in (f.get("atrasos") or "").split(","):
+        marco, _, dias = par.partition(":")
+        if marco.strip() and dias.strip().lstrip("-").isdigit():
+            atrasos[marco.strip()] = int(dias)
+    if not atrasos:
+        raise HTTPException(422, "nenhum atraso informado")
+    novo = cronograma.salvar_como_cenario(
+        s, emp_id, cen["id"], f.get("nome") or "simulação de atraso", atrasos, autor)
+    s.commit()
+    try:
+        rodar_e_persistir(s, novo, executada_por=autor, forcar=True)
+        s.commit()
+    except Exception:                                          # noqa: BLE001
+        s.rollback()
+    return RedirectResponse(f"/empreendimento/{emp_id}/cenarios", status_code=303)
 
 
 @app.post("/empreendimento/{emp_id}/dados/cronograma/sincronizar")
@@ -393,6 +443,10 @@ async def salvar_setor(emp_id: int, codigo: str, request: Request,
         raise HTTPException(409, "cenário congelado não aceita edição")
 
     f = await request.form()
+    if edicao.gravar_custo_medio(
+            s, emp_id=emp_id, codigo=codigo, autor=autor,
+            valor=(edicao.num(f.get("custo_medio_marco")) or None)):
+        s.commit()
     itens = []
     marcos_enviados = f.getlist("marco_id") or [""] * len(f.getlist("descricao"))
     for descricao, qtd, unidade, unitario, valor, obs, marco in zip(

@@ -204,17 +204,32 @@ def cronograma_de_teste(s, emp, cenario):
     base = q(s, "SELECT mes_base FROM cenario WHERE id = :c", c=cenario)[0]["mes_base"]
     m1 = dt.date(base.year + 1, 3, 31)
     m2 = dt.date(base.year + 3, 9, 30)
+
+    # O empreendimento pode já ter cronograma de verdade — e tem, em produção.
+    # Para o teste medir só os dois marcos que ele cria, as outras áreas que
+    # alimentam este setor ficam temporariamente sem setor, e voltam ao fim.
+    setor = "regularizacao_fundiaria"
+    outras = [l["codigo"] for l in
+              q(s, "SELECT codigo FROM area_pdp WHERE setor = :s", s=setor)]
+    q(s, "UPDATE area_pdp SET setor = NULL WHERE setor = :s", s=setor)
+    q(s, """INSERT INTO area_pdp (codigo, nome, setor, ordem)
+            VALUES ('TST', 'Área de teste', :s, 999)
+            ON CONFLICT (codigo) DO UPDATE SET setor = EXCLUDED.setor""", s=setor)
+
     ids = []
     for pdp_id, nome, fim in (("T001", "Matrículas retificadas", m1),
                               ("T002", "Matrículas unificadas", m2)):
         ids.append(q(s, """INSERT INTO marco (empreendimento_id, pdp_id, nome,
                                 area_codigo, inicio, fim, duracao, progresso, critico)
-                           VALUES (:e, :p, :n, '6', :i, :f, 30, 0, false)
+                           VALUES (:e, :p, :n, 'TST', :i, :f, 30, 0, false)
                            RETURNING id""",
                      e=emp, p=pdp_id, n=nome, i=fim, f=fim)[0]["id"])
     s.commit()
     yield {"ids": ids, "meses": [m1, m2]}
     q(s, "DELETE FROM marco WHERE empreendimento_id = :e AND pdp_id LIKE 'T00%'", e=emp)
+    q(s, "DELETE FROM area_pdp WHERE codigo = 'TST'")
+    for cod in outras:
+        q(s, "UPDATE area_pdp SET setor = :s WHERE codigo = :c", s=setor, c=cod)
     s.commit()
 
 
@@ -301,3 +316,120 @@ def test_area_sem_setor_nao_puxa_custo_nenhum(s):
     sem_setor = {l["nome"] for l in
                  q(s, "SELECT nome FROM area_pdp WHERE setor IS NULL")}
     assert {"Engenharia", "Orçamento", "Controladoria", "Novos Negócios"} <= sem_setor
+
+
+# =====================================================================
+# simulação de atraso
+# =====================================================================
+def test_atraso_anda_pela_rede():
+    """A → B → C. Atrasar A move os três; C não anda mais do que o pior caminho."""
+    from app.cronograma import propagar
+    marcos = [{"pdp_id": "A"}, {"pdp_id": "B"}, {"pdp_id": "C"}, {"pdp_id": "D"}]
+    deps = {"B": [("A", "TI", 0)], "C": [("B", "TI", 0)], "D": []}
+    assert propagar(marcos, deps, {"A": 30}) == {"A": 30, "B": 30, "C": 30}
+
+
+def test_sucessor_herda_o_pior_predecessor():
+    """Quem espera dois, espera o mais atrasado — não a soma dos dois."""
+    from app.cronograma import propagar
+    marcos = [{"pdp_id": x} for x in "ABC"]
+    deps = {"C": [("A", "TI", 0), ("B", "TI", 0)]}
+    assert propagar(marcos, deps, {"A": 10, "B": 45}) == {"A": 10, "B": 45, "C": 45}
+
+
+def test_adiantar_nao_puxa_ninguem_para_tras():
+    """
+    Um marco que termina antes não obriga o seguinte a começar antes: quem vem
+    depois tem os próprios motivos para a data que tem. A propagação é sempre
+    para a frente, de propósito.
+    """
+    from app.cronograma import propagar
+    marcos = [{"pdp_id": "A"}, {"pdp_id": "B"}]
+    assert propagar(marcos, {"B": [("A", "TI", 0)]}, {"A": -20}) == {}
+
+
+def test_ciclo_no_cadastro_nao_trava_a_simulacao(caplog):
+    """
+    Cronograma com ciclo existe — é erro de cadastro, e acontece. O que não pode
+    é a tela inteira parar por causa dele.
+    """
+    from app.cronograma import propagar
+    import datetime as dt
+    marcos = [{"pdp_id": "A", "inicio": dt.date(2027, 1, 1)},
+              {"pdp_id": "B", "inicio": dt.date(2027, 2, 1)},
+              {"pdp_id": "Z", "inicio": dt.date(2027, 3, 1)}]
+    deps = {"A": [("B", "TI", 0)], "B": [("A", "TI", 0)], "Z": [("A", "TI", 0)]}
+    movidos = propagar(marcos, deps, {"A": 15})
+    assert movidos["A"] == 15 and movidos["Z"] == 15
+
+
+def test_cenario_de_simulacao_muda_o_caixa_e_nao_o_lucro(s, emp, cenario,
+                                                          composicao_limpa,
+                                                          cronograma_de_teste):
+    """
+    A mesma promessa do módulo, agora atravessando um cenário inteiro: atrasar
+    marco move dinheiro no tempo, não cria nem destrói dinheiro.
+    """
+    from app.cronograma import salvar_como_cenario
+    from app.repositorio import carregar_entradas
+    codigo = composicao_limpa
+    edicao.gravar_composicao(
+        s, emp_id=emp, cenario_id=cenario, codigo=codigo, autor="teste",
+        itens=[{"descricao": "Verba de cartório", "quantidade": None,
+                "unidade": None, "valor_unitario": None, "valor": 200_000.0,
+                "observacao": ""}])
+    s.commit()
+    antes, _, _ = calcular(carregar_entradas(s, cenario))
+
+    novo = salvar_como_cenario(s, emp, cenario, "atraso de teste",
+                               {"T001": 90}, "teste")
+    s.commit()
+    try:
+        depois, fluxo, _ = calcular(carregar_entradas(s, novo))
+        assert depois.lucro == pytest.approx(antes.lucro, abs=CENT)
+        linha = next(l for l in fluxo.linhas if l.codigo == "REG_FUND")
+        assert sum(linha.valores.values()) == pytest.approx(-200_000.0, abs=1.0)
+    finally:
+        q(s, "DELETE FROM cenario WHERE id = :c", c=novo)
+        s.commit()
+
+
+def test_a_rodada_enxerga_o_cronograma(s, emp, cenario, composicao_limpa,
+                                       cronograma_de_teste):
+    """
+    O hash da rodada precisa incluir o cronograma.
+
+    Sem isso acontecem duas coisas ruins e silenciosas: a rodada estoura ao
+    serializar (data como chave de dicionário), ou — pior — dois cenários com
+    cronogramas diferentes acham que são a mesma entrada e compartilham o
+    resultado. Este teste roda o caminho inteiro, que é onde isso aparece.
+    """
+    from app.servico import rodar_e_persistir
+    from app.cronograma import salvar_como_cenario
+    codigo = composicao_limpa
+    edicao.gravar_composicao(
+        s, emp_id=emp, cenario_id=cenario, codigo=codigo, autor="teste",
+        itens=[{"descricao": "Verba", "quantidade": None, "unidade": None,
+                "valor_unitario": None, "valor": 120_000.0, "observacao": ""}])
+    s.commit()
+
+    # dois cenários derivados, com atrasos diferentes: nenhum toca o cenário de
+    # origem, que é de onde a tela de viabilidade lê
+    a = salvar_como_cenario(s, emp, cenario, "atraso curto", {"T001": 30}, "teste")
+    b = salvar_como_cenario(s, emp, cenario, "atraso longo", {"T001": 400}, "teste")
+    s.commit()
+    try:
+        r1 = rodar_e_persistir(s, a, executada_por="teste", forcar=True)
+        r2 = rodar_e_persistir(s, b, executada_por="teste", forcar=True)
+        s.commit()
+        assert r1 != r2, ("cronogramas diferentes viraram a mesma rodada — o "
+                          "hash das entradas não está enxergando o calendário")
+        ind = {l["rodada_id"]: float(l["lucro"]) for l in
+               q(s, "SELECT rodada_id, lucro FROM indicador WHERE rodada_id = ANY(:r)",
+                 r=[r1, r2])}
+        assert len(ind) == 2, "os dois cenários precisam ter indicador gravado"
+        assert ind[r1] == pytest.approx(ind[r2], abs=1.0), (
+            "atrasar marco move caixa, não muda lucro")
+    finally:
+        q(s, "DELETE FROM cenario WHERE id = ANY(:c)", c=[a, b])
+        s.commit()

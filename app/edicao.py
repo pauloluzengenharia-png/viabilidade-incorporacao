@@ -805,6 +805,30 @@ def setores(s: Session) -> list[dict]:
     return q(s, "SELECT * FROM setor_custo ORDER BY ordem")
 
 
+def gravar_custo_medio(s: Session, *, emp_id: int, codigo: str,
+                       valor: Optional[float], autor: str) -> bool:
+    """
+    O custo médio de um marco deste setor — número da casa, não do sistema.
+
+    Vale para todos os empreendimentos, porque é conhecimento do negócio: o que
+    custa, em média, tirar um alvará não muda de obra para obra tanto quanto
+    muda de setor para setor.
+    """
+    atual = q(s, "SELECT custo_medio_marco FROM setor_custo WHERE codigo = :c",
+              c=codigo)[0]["custo_medio_marco"]
+    antes = float(atual) if atual is not None else None
+    if (antes is None and valor is None) or (
+            antes is not None and valor is not None and abs(antes - valor) < 0.005):
+        return False
+    q(s, "UPDATE setor_custo SET custo_medio_marco = :v WHERE codigo = :c",
+      v=valor, c=codigo)
+    registrar(s, emp_id=emp_id, cenario_id=None, modulo="custos",
+              entidade=codigo, campo="custo médio do marco",
+              antes=moeda(antes) if antes is not None else None,
+              depois=moeda(valor) if valor is not None else None, autor=autor)
+    return True
+
+
 def setor(s: Session, codigo: str) -> Optional[dict]:
     r = q(s, "SELECT * FROM setor_custo WHERE codigo = :c", c=codigo)
     return r[0] if r else None

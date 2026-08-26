@@ -5,170 +5,437 @@
 
 <div class="regua"></div>
 <h1>Cronograma</h1>
-<p class="sub">Os marcos do PDP, agrupados pela área que responde por eles e
-  ligados ao setor de custo que paga aquele trabalho. É daqui que sai a resposta
-  para <b>quando</b> o dinheiro de cada setor sai — a pergunta que o estudo,
-  antes disto, respondia com uma regra fixa.</p>
+<p class="sub">Os marcos do PDP no tempo, cada um carregando o custo do setor que
+  paga aquele trabalho. A linha vermelha é hoje; a barra contornada é onde o
+  projeto está agora. Abaixo, quanto sai de caixa em cada período — e o que
+  acontece com essa curva se um marco atrasar.</p>
 
-<div class="acoes" style="margin:1.4rem 0 1.8rem; align-items:center">
-  <form method="post" action="/empreendimento/{{ emp.id }}/dados/cronograma/sincronizar">
-    <button class="principal" type="submit"
-            {{ 'disabled' if not configurado or not emp.pdp_project_id }}>
-      Sincronizar com o PDP</button>
+<div class="acoes barra-topo">
+  <form method="get" class="acoes" style="gap:.8rem; margin:0">
+    <label class="campo"><span class="rot">Cenário</span>
+      <select name="cenario" onchange="this.form.submit()">
+        {% for c in cenarios %}
+        <option value="{{ c.id }}" {{ 'selected' if c.id == cenario.id }}>
+          {{ c.nome }}{% if c.tipo == 'orcado' %} (congelado){% endif %}</option>
+        {% endfor %}
+      </select></label>
+    <label class="campo"><span class="rot">Desembolso por</span>
+      <select name="passo" onchange="this.form.submit()">
+        <option value="mes" {{ 'selected' if passo == 'mes' }}>Mês</option>
+        <option value="trimestre" {{ 'selected' if passo == 'trimestre' }}>Trimestre</option>
+        <option value="ano" {{ 'selected' if passo == 'ano' }}>Ano</option>
+      </select></label>
+    <noscript><button type="submit">Aplicar</button></noscript>
   </form>
-  {% if emp.pdp_project_id %}
-  <span class="legenda-tab" style="margin:0">projeto {{ emp.pdp_project_id }} no PDP</span>
-  {% endif %}
-  {% if ultima %}
-  <span class="legenda-tab" style="margin:0">
-    Última tentativa em {{ ultima.quando.strftime('%d/%m/%Y às %H:%M') }} por
-    {{ ultima.autor }} — {% if ultima.ok %}deu certo{% else %}<b>falhou</b>{% endif %}.
-  </span>
-  {% endif %}
-</div>
 
-<form method="post" class="importar"
-      action="/empreendimento/{{ emp.id }}/dados/cronograma/importar"
-      enctype="multipart/form-data">
-  <label class="campo"><span class="rot">Ou importe o cronograma exportado do PDP</span>
-    <input type="file" name="arquivo" accept=".json,application/json" required></label>
-  <button type="submit">Importar arquivo</button>
-</form>
+  <div class="acoes" style="margin:0">
+    <form method="post" action="/empreendimento/{{ emp.id }}/dados/cronograma/sincronizar">
+      <button type="submit" {{ 'disabled' if not configurado or not emp.pdp_project_id }}>
+        Sincronizar com o PDP</button>
+    </form>
+    <details class="arquivo">
+      <summary>Importar arquivo</summary>
+      <form method="post" enctype="multipart/form-data"
+            action="/empreendimento/{{ emp.id }}/dados/cronograma/importar">
+        <input type="file" name="arquivo" accept=".json,application/json" required>
+        <button type="submit">Importar</button>
+      </form>
+    </details>
+  </div>
+</div>
 
 {% if not emp.pdp_project_id %}
 <div class="aviso"><span><b>{{ emp.nome }} não tem projeto no PDP.</b>
-  O cronograma vem de lá pelo <b>código do projeto</b>, que é o número em
-  <code>project_id</code> na URL do PDP — preencha-o
-  <a href="/empreendimento/{{ emp.id }}/dados/cadastro">no cadastro</a>. Se este
-  empreendimento não existe no PDP, não há cronograma a buscar, e cada setor de
-  custo continua desembolsando pela regra fixa do seu cadastro.</span></div>
-{% endif %}
-
-{% if not configurado %}
-<div class="aviso"><span><b>A leitura do PDP não está configurada.</b>
-  O sistema precisa de um usuário do PDP para ler o cronograma. Crie um usuário
-  de leitura lá, e configure <code>PDP_EMAIL</code> e <code>PDP_SENHA</code> nas
-  variáveis de ambiente do serviço. A senha não passa por esta tela nem fica
-  gravada no banco.</span></div>
+  O cronograma vem de lá pelo <b>código do projeto</b> — o número em
+  <code>project_id</code> na URL do PDP. Preencha-o
+  <a href="/empreendimento/{{ emp.id }}/dados/cadastro">no cadastro</a>, ou
+  importe o arquivo exportado.</span></div>
 {% endif %}
 
 {% if ultima and not ultima.ok %}
-<div class="aviso"><span><b>A última sincronização falhou.</b>
-  {{ ultima.mensagem }}</span></div>
-{% elif ultima and ultima.ok %}
-<div class="aviso calmo"><span>{{ ultima.mensagem }}</span></div>
+<div class="aviso"><span><b>A última sincronização falhou.</b> {{ ultima.mensagem }}</span></div>
 {% endif %}
 
-{% if ultima and not ultima.ok and 'Cloudflare' in (ultima.mensagem or '') %}
-<div class="aviso"><span><b>O PDP não aceita leitura de servidor.</b>
-  Ele está atrás de um desafio de bot do Cloudflare, que responde antes do
-  login — nenhuma credencial passa por ali, e contornar esse desafio não é
-  caminho. Duas saídas: pedir a quem administra o PDP que libere o IP deste
-  serviço na regra de WAF (ou publique uma API), e, enquanto isso, importar o
-  cronograma por arquivo aqui em cima.</span></div>
-{% endif %}
-
-{% if not areas %}
+{% if not gantt.marcos %}
 <div class="vazio">
-  <p><b>Nenhum marco sincronizado ainda.</b></p>
+  <p><b>Nenhum marco ainda.</b></p>
   <p class="sub">Enquanto não houver cronograma, cada setor de custo desembolsa
-    pela regra fixa que está no seu cadastro — diluído na obra, no lançamento, à
-    vista ou na entrega. Funciona; só não é o calendário real.</p>
+    pela regra fixa do seu cadastro — diluído na obra, no lançamento, à vista ou
+    na entrega. Funciona; só não é o calendário real.</p>
 </div>
 {% else %}
 
-<p class="legenda-tab" style="margin:0 0 1rem">
-  Uma área sem setor não gera custo próprio no estudo: ou o trabalho dela já
-  está orçado em outro lugar — Engenharia é a EAP da obra — ou ela produz o
-  preço dos outros, como o Orçamento.
-</p>
+{% if gantt.ajustes %}
+<div class="aviso calmo"><span><b>Este cenário tem cronograma deslocado.</b>
+  {{ gantt.ajustes|length }} marco(s) andaram em relação ao PDP — é uma simulação
+  de atraso que foi salva como cenário. O cronograma original continua intacto no
+  cenário de origem.</span></div>
+{% endif %}
 
-{% for a in areas %}
-<section class="area">
-  <div class="area-cabeca">
-    <div>
-      <h2>{{ a.nome }}</h2>
-      {% if a.papel %}<p class="papel">{{ a.papel|enfase }}</p>{% endif %}
-    </div>
-    <div class="area-meta">
-      {% if a.setor %}
-      <a class="etiqueta" href="/empreendimento/{{ emp.id }}/dados/custos/{{ a.setor }}">
-        paga em {{ a.setor_nome }}</a>
-      {% else %}
-      <span class="etiqueta neutra">sem setor de custo</span>
-      {% endif %}
-      <span class="conta">{{ a.n }} marco{{ '' if a.n == 1 else 's' }}{% if a.criticos %} · {{ a.criticos }} no caminho crítico{% endif %}</span>
-      {% if a.inicio and a.fim %}
-      <span class="janela">{{ a.inicio|mes }} → {{ a.fim|mes }}</span>
+<div class="gantt-caixa">
+  <div class="gantt-cabeca">
+    <div class="agora">
+      {% if gantt.atual %}
+      <span class="rot">Onde o projeto está</span>
+      <b>{{ gantt.atual.nome }}</b>
+      <span class="detalhe">{{ gantt.atual.pdp_id }} · {{ gantt.atual.area }}
+        {%- if gantt.atual.inicio %} · {{ gantt.atual.inicio.strftime('%d/%m/%Y') }}
+        a {{ gantt.atual.fim.strftime('%d/%m/%Y') }}{% endif %}
+        {%- if gantt.atual.critico %} · caminho crítico{% endif %}</span>
       {% endif %}
     </div>
+    <div class="legenda-gantt">
+      <span><i class="am"></i> concluído</span>
+      <span><i class="ag"></i> em curso</span>
+      <span><i class="af"></i> a fazer</span>
+      <span><i class="ac"></i> caminho crítico</span>
+    </div>
   </div>
+  <div class="gantt-rolagem" id="gantt"></div>
+  <p class="legenda-tab" style="margin:.4rem 1.2rem 1.1rem">
+    Clique numa barra para ver os vínculos: o que precisa acontecer antes dela
+    fica com o traço cheio, o que ela destrava fica pontilhado. Clique de novo
+    para soltar.
+  </p>
+</div>
 
-  <div class="rolagem">
-    <table>
-      <thead><tr>
-        <th style="width:64px">ID</th>
-        <th class="conta">Marco</th>
-        <th style="width:110px">Início</th>
-        <th style="width:110px">Fim</th>
-        <th class="n" style="width:70px">Dias</th>
-        <th class="n" style="width:80px">Feito</th>
-        <th style="width:150px">Processo</th>
-      </tr></thead>
-      <tbody>
-      {% for m in a.marcos %}
-        <tr class="{{ 'critico' if m.critico }}">
-          <td class="mono">{{ m.pdp_id }}</td>
-          <td class="conta">{{ m.nome }}{% if m.critico %}
-            <span class="cp" title="No caminho crítico do cenário reprogramado">CP</span>{% endif %}</td>
-          <td class="mono">{{ m.inicio.strftime('%d/%m/%y') if m.inicio else '—' }}</td>
-          <td class="mono">{{ m.fim.strftime('%d/%m/%y') if m.fim else '—' }}</td>
-          <td class="n">{{ m.duracao or '—' }}</td>
-          <td class="n">{{ m.progresso }}%</td>
-          <td class="fraco">{{ m.processo or '—' }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
+<h2 style="margin-top:2.4rem">Desembolso por
+  {{ {'mes':'mês','trimestre':'trimestre','ano':'ano'}[passo] }}</h2>
+<p class="sub">Vem dos mesmos pesos que o motor usa no fluxo de caixa — não é uma
+  segunda conta. Só entram os setores que têm composição; o que está zerado não
+  aparece porque não sai do caixa.</p>
+
+{% if desembolso %}
+{% set maior = desembolso|map(attribute='total')|max %}
+<div class="rolagem">
+  <div class="desembolso">
+    {% for p in desembolso %}
+    <div class="periodo" title="{{ p.rotulo }} — R$ {{ p.total|dinheiro }}">
+      <span class="valor">{{ (p.total/1000)|round|int }}k</span>
+      <span class="col" style="height:{{ (p.total / maior * 100)|round(1) }}%"></span>
+      <span class="rot">{{ p.rotulo }}</span>
+    </div>
+    {% endfor %}
   </div>
-</section>
-{% endfor %}
-
+</div>
 <p class="legenda-tab">
-  O estudo não recalcula cronograma — quem faz isso é o PDP. Aqui as datas são
-  lidas e usadas para distribuir o desembolso; reprogramou lá, sincronize aqui e
-  recalcule o cenário para ver o efeito no caixa.
+  {{ desembolso|length }} períodos, de {{ desembolso[0].rotulo }} a
+  {{ desembolso[-1].rotulo }}. Total
+  <b>R$ {{ desembolso|sum(attribute='total')|dinheiro }}</b>.
+</p>
+{% else %}
+<div class="vazio"><p>Nenhum setor com composição neste cenário — não há
+  desembolso a distribuir. Preencha os
+  <a href="/empreendimento/{{ emp.id }}/dados/custos?cenario={{ cenario.id }}">setores
+  de custo</a> e cada barra do Gantt passa a ter valor.</p></div>
+{% endif %}
+
+<h2 style="margin-top:2.4rem">Simular um atraso</h2>
+<p class="sub">Informe quantos dias um marco escorrega. O sistema empurra tudo
+  que depende dele — um sucessor anda o máximo do que os seus predecessores
+  andaram, nunca menos que zero, porque adiantar um marco não puxa o resto para
+  trás. Nada é gravado até você salvar como cenário.</p>
+
+<div class="simulador" id="simulador">
+  <div class="acoes" style="margin:0 0 1rem">
+    <label class="campo" style="min-width:340px"><span class="rot">Marco</span>
+      <select id="sim-marco">
+        {% for m in gantt.marcos %}
+        <option value="{{ m.pdp_id }}">{{ m.pdp_id }} · {{ m.nome }}{% if m.fim %} ({{ m.fim.strftime('%m/%Y') }}){% endif %}</option>
+        {% endfor %}
+      </select></label>
+    <label class="campo" style="width:130px"><span class="rot">Atraso (dias)</span>
+      <input type="text" inputmode="numeric" id="sim-dias" value="30"></label>
+    <button type="button" id="sim-rodar" class="principal">Simular</button>
+    <button type="button" id="sim-limpar">Limpar</button>
+  </div>
+  <div id="sim-saida"></div>
+</div>
+
+<h2 style="margin-top:2.4rem">O custo que cada barra carrega</h2>
+<p class="sub">Cada setor informa quanto custa, em média, um dos seus marcos — é
+  número da casa, não conta do sistema. Quando essa média multiplicada pelo
+  número de marcos não bate com o total da composição, a tabela mostra a
+  diferença em vez de escolher um dos dois lados.</p>
+<div class="rolagem">
+  <table>
+    <thead><tr>
+      <th class="conta">Setor</th>
+      <th class="n" style="width:90px">Marcos</th>
+      <th class="n" style="width:150px">Média por marco</th>
+      <th class="n" style="width:160px">Média × marcos</th>
+      <th class="n" style="width:160px">Composição</th>
+      <th class="n" style="width:150px">Diferença</th>
+    </tr></thead>
+    <tbody>
+    {% for st in gantt.setores %}
+      <tr>
+        <td class="conta"><a href="/empreendimento/{{ emp.id }}/dados/custos/{{ st.codigo }}?cenario={{ cenario.id }}">{{ st.nome }}</a></td>
+        <td class="n">{{ st.marcos or '—' }}</td>
+        <td class="n">{% if st.media is not none %}{{ st.media|moeda(2) }}{% else %}<span class="fraco">rateio igual</span>{% endif %}</td>
+        <td class="n">{{ st.pela_media|moeda(2) if st.pela_media is not none else '—' }}</td>
+        <td class="n">{{ st.composicao|moeda(2) }}</td>
+        <td class="n">
+          {%- if st.pela_media is none or not st.composicao %}—
+          {%- else %}<span class="{{ 'diverge' if (st.pela_media - st.composicao)|abs > 0.01 }}">{{ (st.pela_media - st.composicao)|moeda(2) }}</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="legenda-tab">
+  A composição é o que entra no resultado — a média serve para dar peso a cada
+  barra. Diferença grande quer dizer uma de duas coisas: ou a média está
+  desatualizada, ou a composição não cobre tudo que aquele setor faz.
 </p>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
+{% if gantt.marcos %}
+<script id="dados-gantt" type="application/json">{{ gantt_json|safe }}</script>
+<script>
+(function () {
+  const D = JSON.parse(document.getElementById("dados-gantt").textContent);
+  const alvo = document.getElementById("gantt");
+  const dia = 86400000;
+  const comData = D.marcos.filter(m => m.inicio && m.fim);
+  if (!comData.length) return;
+
+  const ini = new Date(Math.min(...comData.map(m => +new Date(m.inicio))));
+  const fim = new Date(Math.max(...comData.map(m => +new Date(m.fim))));
+  const total = Math.max((fim - ini) / dia, 1);
+  const LARG = Math.max(900, Math.round(total * 1.4));
+  const ROTULO = 300, ALT = 21, TOPO = 44;
+  const pos = d => ((new Date(d) - ini) / dia) / total * LARG;
+  const real = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
+  const br = d => new Date(d).toLocaleDateString("pt-BR");
+
+  const linhas = [];
+  let y = TOPO, area = null;
+  for (const m of D.marcos) {
+    if (m.area !== area) { area = m.area;
+      linhas.push({tipo: "area", nome: m.area || "sem área", setor: m.setor_nome, y: y});
+      y += 25; }
+    linhas.push({tipo: "marco", m: m, y: y});
+    y += ALT;
+  }
+  const ALTURA = y + 20;
+  const porId = {};
+  linhas.filter(l => l.tipo === "marco").forEach(l => porId[l.m.pdp_id] = l);
+
+  let eixo = "";
+  for (let a = ini.getFullYear(); a <= fim.getFullYear(); a++) {
+    const x = pos(new Date(a, 0, 1));
+    if (x < 0 || x > LARG) continue;
+    eixo += `<line class="ano-linha" x1="${x}" y1="${TOPO - 12}" x2="${x}" y2="${ALTURA}"/>`
+          + `<text class="ano-txt" x="${x + 5}" y="${TOPO - 18}">${a}</text>`;
+  }
+
+  let corpo = "";
+  for (const l of linhas) {
+    if (l.tipo === "area") {
+      corpo += `<text class="area-txt" x="4" y="${l.y + 15}">${l.nome}`
+             + (l.setor ? `<tspan class="setor-txt"> · ${l.setor}</tspan>` : "") + `</text>`;
+      continue;
+    }
+    const m = l.m, x = pos(m.inicio), w = Math.max(pos(m.fim) - x, 3);
+    const cls = ["barra", m.concluido ? "feito" : (m.em_curso ? "curso" : "afazer"),
+                 m.critico ? "critico" : "",
+                 (D.atual && m.pdp_id === D.atual.pdp_id) ? "agora" : ""].join(" ");
+    const dica = `${m.pdp_id} · ${m.nome}\n${m.area || ""}\n${br(m.inicio)} a ${br(m.fim)}`
+               + ` · ${m.duracao || "?"} dias`
+               + (m.custo ? `\n${real(m.custo)}${m.custo_proprio ? " (item amarrado)" : " (média do setor)"}` : "")
+               + (m.deslocado ? `\ndeslocado ${m.deslocado} dias neste cenário` : "");
+    corpo += `<g class="linha" data-id="${m.pdp_id}">`
+           + `<rect class="faixa" x="0" y="${l.y - 4}" width="${LARG + ROTULO}" height="${ALT}"/>`
+           + `<rect class="${cls}" x="${x}" y="${l.y}" width="${w}" height="12" rx="3">`
+           + `<title>${dica}</title></rect>`
+           + `<text class="nome-marco" x="${x + w + 7}" y="${l.y + 10}">${m.nome}`
+           + (m.custo ? `<tspan class="custo"> ${real(m.custo)}</tspan>` : "")
+           + `</text></g>`;
+  }
+
+  let vinculos = "";
+  for (const destino in D.dependencias) {
+    const d = porId[destino]; if (!d) continue;
+    for (const par of D.dependencias[destino]) {
+      const o = porId[par[0]]; if (!o) continue;
+      const x1 = pos(o.m.fim), y1 = o.y + 6, x2 = pos(d.m.inicio), y2 = d.y + 6;
+      vinculos += `<path class="vinculo" data-de="${par[0]}" data-para="${destino}"`
+                + ` d="M${x1} ${y1} C${x1 + 16} ${y1}, ${x2 - 16} ${y2}, ${x2} ${y2}"/>`;
+    }
+  }
+
+  const hoje = pos(D.hoje);
+  const marcaHoje = (hoje >= 0 && hoje <= LARG)
+    ? `<line class="hoje" x1="${hoje}" y1="${TOPO - 24}" x2="${hoje}" y2="${ALTURA - 6}"/>`
+      + `<text class="hoje-txt" x="${hoje + 5}" y="${TOPO - 28}">hoje</text>` : "";
+
+  alvo.innerHTML = `<svg viewBox="0 0 ${LARG + ROTULO} ${ALTURA}"
+      width="${LARG + ROTULO}" height="${ALTURA}">
+      ${eixo}<g class="vinculos">${vinculos}</g><g class="barras">${corpo}</g>${marcaHoje}</svg>`;
+
+  let sel = null;
+  alvo.addEventListener("click", e => {
+    const g = e.target.closest(".linha");
+    const id = g && g.dataset.id;
+    sel = (!id || id === sel) ? null : id;
+    alvo.classList.toggle("focado", !!sel);
+    alvo.querySelectorAll(".vinculo").forEach(v => {
+      v.classList.toggle("entra", v.dataset.para === sel);
+      v.classList.toggle("sai", v.dataset.de === sel);
+    });
+    alvo.querySelectorAll(".linha").forEach(l =>
+      l.classList.toggle("aceso", l.dataset.id === sel));
+  });
+  if (hoje > 0) alvo.scrollLeft = Math.max(0, hoje - alvo.clientWidth / 2);
+
+  // ------------------------------------------------------------ simulação
+  const saida = document.getElementById("sim-saida");
+  const base = window.location.pathname;
+
+  document.getElementById("sim-rodar").addEventListener("click", async () => {
+    const marco = document.getElementById("sim-marco").value;
+    const dias = parseInt(document.getElementById("sim-dias").value, 10);
+    if (!marco || !dias || dias <= 0) {
+      saida.innerHTML = `<p class="legenda-tab">Informe um atraso em dias, maior que zero.</p>`;
+      return;
+    }
+    saida.innerHTML = `<p class="legenda-tab">Empurrando a rede…</p>`;
+    const r = await fetch(base + "/simular" + window.location.search, {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({atrasos: {[marco]: dias}})});
+    mostrar(await r.json(), marco, dias);
+  });
+
+  document.getElementById("sim-limpar").addEventListener("click", () => {
+    saida.innerHTML = "";
+    alvo.querySelectorAll(".barra").forEach(b => b.classList.remove("movido"));
+  });
+
+  function mostrar(d, marco, dias) {
+    if (!d.quantos) {
+      saida.innerHTML = `<p class="legenda-tab">Esse marco não empurra ninguém —
+        nenhum outro depende dele.</p>`;
+      return;
+    }
+    const linhas = d.movidos.slice(0, 40).map(m => `<tr class="${m.informado ? 'informado' : ''}">
+        <td class="mono">${m.pdp_id}</td>
+        <td class="conta">${m.nome}${m.critico ? ' <span class="cp">CP</span>' : ''}</td>
+        <td class="n">${m.dias}d</td>
+        <td class="mono">${br(m.fim_antes)}</td>
+        <td class="mono forte">${br(m.fim_depois)}</td></tr>`).join("");
+    const sobra = d.quantos > 40
+      ? `<p class="legenda-tab">e mais ${d.quantos - 40} marcos.</p>` : "";
+    const cen = document.querySelector('[name=cenario] option:checked').textContent.trim();
+    saida.innerHTML = `
+      <div class="aviso calmo"><span><b>${d.informados} marco atrasado em ${dias} dias
+        arrasta ${d.arrastados} outros.</b> O último marco do projeto vai de
+        ${br(d.fim_antes)} para <b>${br(d.fim_depois)}</b>.</span></div>
+      <div class="rolagem" style="max-height:340px; overflow-y:auto">
+        <table><thead><tr><th style="width:64px">ID</th><th class="conta">Marco</th>
+          <th class="n" style="width:70px">Anda</th>
+          <th style="width:110px">Fim antes</th><th style="width:110px">Fim depois</th>
+        </tr></thead><tbody>${linhas}</tbody></table></div>${sobra}
+      <form method="post" class="acoes" style="margin-top:1.2rem"
+            action="${base}/cenario${window.location.search}">
+        <input type="hidden" name="atrasos" value="${marco}:${dias}">
+        <label class="campo" style="min-width:280px"><span class="rot">Salvar como cenário</span>
+          <input type="text" name="nome" value="atraso de ${dias}d em ${marco}"></label>
+        <button class="principal" type="submit">Salvar e recalcular</button>
+      </form>
+      <p class="legenda-tab">O cenário nasce como cópia de <b>${cen}</b> com o
+        cronograma deslocado — mesmo preço, mesmo custo, outra data.</p>`;
+    const movidos = new Set(d.movidos.map(m => m.pdp_id));
+    alvo.querySelectorAll(".linha").forEach(l =>
+      l.querySelector(".barra").classList.toggle("movido", movidos.has(l.dataset.id)));
+  }
+})();
+</script>
+{% endif %}
+
 <style>
-  .area{margin-bottom:2.6rem}
-  .area-cabeca{display:flex; justify-content:space-between; align-items:flex-start;
-    gap:1.5rem; flex-wrap:wrap; margin-bottom:.8rem}
-  .area-cabeca h2{margin:0 0 .25rem}
-  .area .papel{margin:0; color:var(--tinta-3); font-size:.86rem; max-width:64ch}
-  .area-meta{display:flex; flex-direction:column; align-items:flex-end; gap:.35rem;
-    font-size:.8rem; white-space:nowrap}
-  .etiqueta{display:inline-block; padding:.15rem .6rem; border-radius:999px;
-    border:1px solid var(--fio-forte); text-decoration:none; color:var(--tinta-2);
-    font-size:.78rem}
-  .etiqueta:hover{border-color:var(--tinta); color:var(--tinta)}
-  .etiqueta.neutra{color:var(--tinta-3); border-style:dashed}
-  .area-meta .conta,.area-meta .janela{color:var(--tinta-3);
+  .barra-topo{justify-content:space-between; align-items:flex-end; flex-wrap:wrap;
+    gap:1rem; margin:1.4rem 0 1.6rem}
+  .arquivo summary{cursor:pointer; font-size:.85rem; color:var(--tinta-2);
+    padding:.45rem .9rem; border:1px solid var(--fio-forte); border-radius:8px;
+    list-style:none}
+  .arquivo[open] summary{margin-bottom:.6rem}
+  .arquivo form{display:flex; gap:.6rem; align-items:center; flex-wrap:wrap}
+  .arquivo input[type=file]{font-size:.8rem; max-width:230px}
+
+  .gantt-caixa{background:var(--cartao); border:1px solid var(--fio);
+    border-radius:12px; overflow:hidden}
+  .gantt-cabeca{display:flex; justify-content:space-between; align-items:flex-start;
+    gap:1.5rem; flex-wrap:wrap; padding:1.1rem 1.2rem .9rem;
+    border-bottom:1px solid var(--fio)}
+  .agora .rot{display:block; font-size:.68rem; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--tinta-3); margin-bottom:.25rem}
+  .agora b{font-size:1rem}
+  .agora .detalhe{display:block; font-size:.78rem; color:var(--tinta-3);
     font-variant-numeric:tabular-nums}
-  td.mono{font-family:"Inter",sans-serif; font-variant-numeric:tabular-nums;
-    font-size:.84rem; color:var(--tinta-2)}
-  tr.critico td.conta{font-weight:600}
-  .cp{font-size:.62rem; letter-spacing:.09em; border:1px solid var(--realizado);
-    color:var(--realizado); border-radius:3px; padding:0 .25rem; margin-left:.4rem;
-    vertical-align:1px}
-  .importar{display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;
-    margin:0 0 1.6rem; padding:1rem 1.2rem; background:var(--cartao);
-    border:1px solid var(--fio); border-radius:10px}
-  .importar .campo{margin:0}
-  .importar input[type=file]{font-size:.85rem}
+  .legenda-gantt{display:flex; gap:.9rem; flex-wrap:wrap; font-size:.75rem;
+    color:var(--tinta-3)}
+  .legenda-gantt i{display:inline-block; width:16px; height:7px; border-radius:2px;
+    margin-right:.3rem; vertical-align:1px}
+  .legenda-gantt i.am{background:var(--fio-forte)}
+  .legenda-gantt i.ag{background:var(--areia)}
+  .legenda-gantt i.af{background:var(--tinta-3); opacity:.45}
+  .legenda-gantt i.ac{background:var(--realizado)}
+  .gantt-rolagem{max-height:620px; overflow:auto; padding:0 1.2rem 1rem}
+
+  /* o SVG tem a largura do tempo, não a da tela: quem rola é a caixa.
+     Sem `max-width:none` a regra global espremeria 5 anos em 1.100px e o
+     viewBox centralizaria o desenho fora da área visível. */
+  #gantt svg{display:block; font-family:"Inter",sans-serif;
+    max-width:none; width:auto; height:auto}
+  #gantt .ano-linha{stroke:var(--fio); stroke-width:1}
+  #gantt .ano-txt{fill:var(--tinta-3); font-size:11px; letter-spacing:.06em}
+  #gantt .faixa{fill:transparent}
+  #gantt .linha:hover .faixa{fill:var(--fio); opacity:.4}
+  #gantt .area-txt{fill:var(--tinta); font-size:12.5px; font-weight:600;
+    letter-spacing:.01em}
+  #gantt .setor-txt{fill:var(--tinta-3); font-weight:400; font-size:11px}
+  #gantt .barra{fill:var(--tinta-3); opacity:.45; cursor:pointer}
+  #gantt .barra.feito{fill:var(--fio-forte); opacity:1}
+  #gantt .barra.curso{fill:var(--areia); opacity:1}
+  #gantt .barra.critico{fill:var(--realizado); opacity:.85}
+  #gantt .barra.agora{stroke:var(--tinta); stroke-width:2}
+  #gantt .barra.movido{fill:var(--realizado); opacity:1}
+  #gantt text{text-transform:none; letter-spacing:0; font-weight:400}
+  #gantt .nome-marco{fill:var(--tinta-2); font-size:11px; pointer-events:none}
+  #gantt .nome-marco .custo{fill:var(--tinta-3); font-variant-numeric:tabular-nums}
+  #gantt .vinculo{fill:none; stroke:var(--fio-forte); stroke-width:1; opacity:.25}
+  #gantt.focado .vinculo{opacity:.05}
+  #gantt .vinculo.entra{stroke:var(--tinta); opacity:1; stroke-width:1.6}
+  #gantt .vinculo.sai{stroke:var(--tinta); opacity:.85; stroke-dasharray:3 3}
+  #gantt.focado .linha{opacity:.35}
+  #gantt.focado .linha.aceso{opacity:1}
+  #gantt .hoje{stroke:var(--realizado); stroke-width:1.5; stroke-dasharray:4 3}
+  #gantt .hoje-txt{fill:var(--realizado); font-size:10.5px; letter-spacing:.1em}
+
+  .desembolso{display:flex; align-items:flex-end; gap:3px; min-width:100%;
+    height:200px; padding:1.2rem 1rem .2rem}
+  .periodo{display:flex; flex-direction:column; justify-content:flex-end;
+    align-items:center; min-width:24px; flex:1; height:100%}
+  .periodo .col{width:100%; max-width:56px; background:var(--areia);
+    border-radius:3px 3px 0 0; min-height:2px}
+  .periodo:hover .col{background:var(--tinta)}
+  .periodo .valor{font-size:9px; color:var(--tinta-3); margin-bottom:3px;
+    font-variant-numeric:tabular-nums; opacity:0}
+  .periodo:hover .valor{opacity:1}
+  .periodo .rot{font-size:8.5px; color:var(--tinta-3); margin-top:4px;
+    writing-mode:vertical-rl; white-space:nowrap}
+
+  .simulador{background:var(--cartao); border:1px solid var(--fio);
+    border-radius:12px; padding:1.2rem 1.3rem}
+  .simulador tr.informado td{font-weight:600}
+  td.mono{font-variant-numeric:tabular-nums; font-size:.82rem; color:var(--tinta-2)}
+  td.mono.forte{color:var(--tinta); font-weight:600}
+  .cp{font-size:.6rem; letter-spacing:.09em; border:1px solid var(--realizado);
+    color:var(--realizado); border-radius:3px; padding:0 .22rem; margin-left:.35rem}
+  .diverge{color:var(--realizado); font-weight:600}
   .vazio{background:var(--cartao); border:1px solid var(--fio); border-radius:12px;
     padding:2rem; text-align:center}
   .vazio .sub{max-width:56ch; margin:.6rem auto 0}
